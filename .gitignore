@@ -1,0 +1,6 @@
+/build/
+/static/game.wasm
+/static/wasm_exec.js
+PLAN.md
+*.txt
+*.diff

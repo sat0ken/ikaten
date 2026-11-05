@@ -1,0 +1,27 @@
+<!doctype html><meta charset="utf-8"><title>ikaten browser check</title><pre id="result">RUNNING</pre><iframe id="game" src="index.html"></iframe>
+<script>
+const result=document.querySelector('#result');
+const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+window.addEventListener('load',async()=>{
+ try {
+  const game=document.querySelector('iframe').contentWindow;
+  for(let n=0;n<50&&game.document.querySelector('#status').textContent!=='プレビュー実行中';n++)await delay(100);
+  if(game.document.querySelector('#status').textContent!=='プレビュー実行中')throw Error('WASM not running');
+  const canvas=game.document.querySelector('canvas'),ctx=canvas.getContext('2d');
+  const hash=()=>{let h=2166136261;for(const b of ctx.getImageData(0,0,240,240).data)h=Math.imul(h^b,16777619);return h>>>0};
+  const key=(type,code)=>game.dispatchEvent(new game.KeyboardEvent(type,{code,cancelable:true}));
+  const first=hash();await delay(200);if(hash()===first)throw Error('animation frozen');
+  key('keydown','KeyX');await delay(100);key('keyup','KeyX');await delay(100);
+  const paused=hash();await delay(200);if(hash()!==paused)throw Error('X did not pause');
+  key('keydown','KeyZ');await delay(100);key('keyup','KeyZ');await delay(100);
+  const tinted=hash();if(tinted===paused)throw Error('Z did not tint');
+  key('keydown','ArrowRight');await delay(100);key('keyup','ArrowRight');await delay(100);
+  const moved=hash();if(moved===tinted)throw Error('arrow did not move player');
+  const release=hash();await delay(100);if(hash()!==release)throw Error('key release stuck');
+  key('keydown','KeyX');await delay(100);key('keyup','KeyX');await delay(200);
+  if(hash()===moved)throw Error('X did not resume');
+  game.dispatchEvent(new game.Event('blur'));
+  result.textContent='PASS: animation, pause, tint, arrow movement, release, resume';
+ }catch(error){result.textContent='FAIL: '+error;console.error(error)}
+});
+</script>

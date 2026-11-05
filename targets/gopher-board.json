@@ -1,0 +1,4 @@
+{
+ "inherits": ["waveshare-rp2040-zero"],
+ "build-tags": ["ikaten_gopher_board"]
+}

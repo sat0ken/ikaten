@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ikaten · TinyGo preview</title>
+<style>
+ :root{color-scheme:dark;font-family:system-ui,sans-serif;background:#101827;color:#e7eef8}
+ body{max-width:640px;margin:5vh auto;padding:24px;text-align:center}
+ h1{font-size:2rem;letter-spacing:.05em;margin-bottom:8px}p{color:#aabbd3;line-height:1.7}
+ canvas{display:block;width:min(100%,480px);height:auto;margin:24px auto;background:#000;image-rendering:pixelated;border:1px solid #40516c;border-radius:6px}
+ .controls{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+ button{font:inherit;padding:12px 20px;background:#263956;color:#e7eef8;border:1px solid #506988;border-radius:8px;touch-action:none;user-select:none}
+ button:active{background:#3a5b83}#status{font-size:.9rem}
+</style>
+<h1>ikaten</h1>
+<p>TinyGo Conference 2026 badge preview<br>矢印キーで移動 · Zで色を変更 · Xで一時停止</p>
+<canvas id="screen" width="240" height="240" aria-label="ゲーム画面"></canvas>
+<div class="controls">
+ <button data-code="ArrowLeft">←</button><button data-code="ArrowUp">↑</button>
+ <button data-code="ArrowDown">↓</button><button data-code="ArrowRight">→</button>
+ <button data-code="KeyZ">A / Z</button><button data-code="KeyX">B / X</button>
+</div>
+<p id="status" role="status">WASMを読み込み中…</p>
+<script src="wasm_exec.js"></script>
+<script>
+ let frame, context;
+ window.ikatenInit = (w,h) => {
+  const canvas=document.querySelector('#screen');canvas.width=w;canvas.height=h;
+  context=canvas.getContext('2d');frame=context.createImageData(w,h);
+  window.ikatenPixels=new Uint8Array(w*h*4);
+ };
+ window.ikatenPresent = () => {frame.data.set(window.ikatenPixels);context.putImageData(frame,0,0)};
+ for(const button of document.querySelectorAll('[data-code]')) {
+  const key=(type)=>window.dispatchEvent(new KeyboardEvent(type,{code:button.dataset.code,cancelable:true}));
+  button.addEventListener('pointerdown',e=>{button.setPointerCapture(e.pointerId);key('keydown')});
+  button.addEventListener('pointerup',()=>key('keyup'));
+  button.addEventListener('pointercancel',()=>key('keyup'));
+  button.addEventListener('lostpointercapture',()=>key('keyup'));
+ }
+ (async()=>{
+  const status=document.querySelector('#status');
+  try {
+   const go=new Go();const response=await fetch('game.wasm');
+   if(!response.ok)throw new Error(`WASM HTTP ${response.status}`);
+   const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),go.importObject);
+   status.textContent='プレビュー実行中';await go.run(instance);status.textContent='終了しました';
+  } catch(error){status.textContent=String(error);console.error(error)}
+ })();
+</script>
+</html>

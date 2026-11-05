@@ -1,0 +1,4 @@
+{
+ "inherits": ["esp32s3-box-3"],
+ "build-tags": ["ikaten_badge"]
+}
