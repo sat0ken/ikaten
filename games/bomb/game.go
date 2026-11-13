@@ -14,12 +14,12 @@ import (
 )
 
 const (
-	ScreenWidth  = 120
-	ScreenHeight = 120
+	ScreenWidth  = 240
+	ScreenHeight = 240
 	tps          = 60
 
 	cols, rows = 13, 11
-	tile       = 9  // pixels
+	tile       = 18 // pixels
 	unit       = 48 // position units per tile; a gopher's center is in units
 	half       = unit / 2
 
@@ -252,10 +252,8 @@ func (g *Game) open(c, r int) bool {
 
 func pressed(k ebiten.Key) bool { return inpututil.IsKeyJustPressed(k) }
 
-// Layout gives a screen pixelScale times the game's 120 by 120: the game
-// keeps its coordinates and draws everything that much larger.
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return ScreenWidth * pixelScale, ScreenHeight * pixelScale
+	return ScreenWidth, ScreenHeight
 }
 
 // input is what the person does in one tick.

@@ -175,13 +175,21 @@ func main() {
 }
 EOF
 GOOS=js GOARCH=wasm go build -mod=mod -o ../fish-ebitengine.wasm ./fishmain
+# pixtext is the font that the games drawn for 240 by 240 share.
+rm -rf pixtext
+mkdir -p pixtext
+for f in ../../games/pixtext/*.go; do
+ case "$f" in *_test.go) continue;; esac
+ sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' "$f" > "pixtext/$(basename "$f")"
+done
 # bomb, like train, air and fish, draws its images in code. Its main is
 # written here.
 rm -rf bomb bombmain
 mkdir -p bomb bombmain
 for f in ../../games/bomb/*.go; do
  case "$f" in *_test.go) continue;; esac
- sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+ sed -e 's#"github.com/sat0ken/ikaten/games/pixtext"#"ikaten-compat/pixtext"#' \
+  -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
   -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "bomb/$(basename "$f")"
 done
 cat > bombmain/main.go <<'EOF'
@@ -208,7 +216,8 @@ rm -rf jump jumpmain
 mkdir -p jump jumpmain
 for f in ../../games/jump/*.go; do
  case "$f" in *_test.go) continue;; esac
- sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+ sed -e 's#"github.com/sat0ken/ikaten/games/pixtext"#"ikaten-compat/pixtext"#' \
+  -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
   -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "jump/$(basename "$f")"
 done
 cat > jumpmain/main.go <<'EOF'

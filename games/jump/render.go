@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	ebiten "github.com/sat0ken/ikaten"
+	"github.com/sat0ken/ikaten/games/pixtext"
 )
 
 var (
@@ -11,20 +12,32 @@ var (
 	textYellow = color.RGBA{255, 220, 60, 255}
 	textRed    = color.RGBA{255, 90, 70, 255}
 	textGray   = color.RGBA{170, 180, 200, 255}
-	textDark   = color.RGBA{30, 34, 50, 255}
+	textShadow = color.RGBA{20, 24, 40, 255}
 	boxColor   = color.RGBA{20, 24, 40, 255}
 	boxEdge    = color.RGBA{110, 130, 190, 255}
-	poleColor  = color.RGBA{220, 220, 230, 255}
+	boxLight   = color.RGBA{170, 186, 230, 255}
+	poleLight  = color.RGBA{240, 240, 248, 255}
+	poleShade  = color.RGBA{170, 170, 190, 255}
+	knobColor  = color.RGBA{255, 210, 60, 255}
+	knobShade  = color.RGBA{200, 140, 30, 255}
 	flagRed    = color.RGBA{230, 70, 60, 255}
 	flagGreen  = color.RGBA{60, 200, 90, 255}
+	flagDark   = color.RGBA{30, 140, 60, 255}
+	dashLine   = color.RGBA{255, 255, 255, 255}
 )
+
+var line pixtext.Line
+
+// T is a tile's size on the screen.
+const T = tile * zoom
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	lk := &looks[g.stage]
-	g.drawBackground(screen, lk)
-	g.drawTiles(screen, lk)
-	g.drawEnemies(screen)
-	g.drawGopher(screen) // behind the title too, where it runs on its own
+	cam := int(g.camera * zoom)
+	g.drawBackground(screen, lk, cam)
+	g.drawTiles(screen, cam)
+	g.drawEnemies(screen, cam)
+	g.drawGopher(screen, cam) // behind the title too, where it runs on its own
 	g.drawHUD(screen)
 	g.drawOverlay(screen)
 }
@@ -41,17 +54,42 @@ func tri(x, p int) int {
 	return (p - x) * 128 / p
 }
 
-// drawBackground draws the sky and two layers behind that scroll slower
-// than the ground: hills in the meadow and the sky, rock in the cave.
-func (g *Game) drawBackground(screen *ebiten.Image, lk *look) {
-	const bands = 6
-	for i := range bands {
+// skyColors are the stages' skies as color.Color, made once: making one
+// each frame would allocate.
+var skyColors [len(looks)]color.Color
+
+func init() {
+	for i := range looks {
+		skyColors[i] = looks[i].sky
+	}
+}
+
+// cloudSpan is how far apart the clouds far behind come round again.
+const cloudSpan = 4 * 180
+
+// drawBackground draws the sky, clouds far behind, and two layers that
+// scroll slower than the ground: hills in the meadow and the sky, rock in the
+// cave.
+func (g *Game) drawBackground(screen *ebiten.Image, lk *look, cam int) {
+	const bands = 12
+	// Filling the whole screen marks it opaque, after which drawing on it
+	// need not mark what it covers.
+	screen.Fill(skyColors[g.stage])
+	for i := 1; i < bands; i++ {
 		fill(screen, lerp(lk.sky, lk.horizon, float32(i)/(bands-1)), 0, i*ScreenHeight/bands, ScreenWidth, ScreenHeight/bands+1)
 	}
-	cam := int(g.camera)
+	if lk.clouds {
+		for i := range 4 {
+			x := (i*180+97*i%60-cam/8)%cloudSpan - 40
+			if x < -40 {
+				x += cloudSpan
+			}
+			drawAt(screen, imageFarCloud, x, 22+i*29%70)
+		}
+	}
 	for x := range ScreenWidth {
-		g.far[x] = 34 + tri(x+cam/4, 90)/3 + tri(x+cam/4+20, 37)/6
-		g.near[x] = 18 + tri(x+cam/2, 70)/4 + tri(x+cam/2+11, 23)/8
+		g.far[x] = 68 + tri(x+cam/4, 180)*2/3 + tri(x+cam/4+40, 74)/3
+		g.near[x] = 36 + tri(x+cam/2, 140)/2 + tri(x+cam/2+22, 46)/4
 		if g.stage == 2 {
 			g.far[x], g.near[x] = g.far[x]/2, g.near[x]/3 // a sea of clouds far below
 		}
@@ -68,28 +106,36 @@ func (g *Game) drawBackground(screen *ebiten.Image, lk *look) {
 // skyline fills the screen's columns up from the bottom, or down from the
 // top, to the given heights divided by div. It fills a row at a time in spans
 // and the part all columns cover at once: a column at a time would set up
-// each row of each column apart, which costs far more.
+// each row of each column apart, which costs far more. Going across once, a
+// span starts on the rows a column rises past and ends on the rows it drops
+// below, so only the edges are visited.
+// spanStart is where the span on each row began. It is kept here: on the
+// stack of a microcontroller it would be too large and go to the heap.
+var spanStart [ScreenHeight]int
+
 func skyline(screen *ebiten.Image, c color.RGBA, h *[ScreenWidth]int, div int, top bool) {
-	low, high := h[0]/div, h[0]/div
+	low := h[0] / div
 	for _, v := range h {
-		low, high = min(low, v/div), max(high, v/div)
+		low = min(low, v/div)
 	}
-	for d := low; d < high; d++ {
-		y := ScreenHeight - 1 - d
-		if top {
-			y = d
+	start := &spanStart
+	prev := low
+	for x := 0; x <= ScreenWidth; x++ {
+		cur := low
+		if x < ScreenWidth {
+			cur = min(h[x]/div, ScreenHeight)
 		}
-		x0 := -1
-		for x := 0; x <= ScreenWidth; x++ {
-			in := x < ScreenWidth && h[x]/div > d
-			switch {
-			case in && x0 < 0:
-				x0 = x
-			case !in && x0 >= 0:
-				fill(screen, c, x0, y, x-x0, 1)
-				x0 = -1
+		for d := prev; d < cur; d++ {
+			start[d] = x
+		}
+		for d := cur; d < prev; d++ {
+			y := ScreenHeight - 1 - d
+			if top {
+				y = d
 			}
+			fill(screen, c, start[d], y, x-start[d], 1)
 		}
+		prev = cur
 	}
 	if top {
 		fill(screen, c, 0, 0, ScreenWidth, low)
@@ -104,72 +150,104 @@ func lerp(a, b color.RGBA, t float32) color.RGBA {
 
 func mix(x, y uint8, t float32) uint8 { return uint8(float32(x) + (float32(y)-float32(x))*t) }
 
-// drawTiles draws the map in view. Ground is drawn a column of tiles at a
-// time, with grass where it meets the air.
-func (g *Game) drawTiles(screen *ebiten.Image, lk *look) {
-	cam := int(g.camera)
-	c0, c1 := cam/tile, min((cam+ScreenWidth)/tile+1, g.width)
+// ground reports whether a tile is ground, for the edges and the grass.
+func (g *Game) ground(c, r int) bool {
+	if c < 0 || c >= g.width || r < 0 {
+		return true
+	}
+	return r < rows && solid(g.level[r][c])
+}
+
+// drawTiles draws the map in view: ground with grass where it meets the air
+// and an edge on its open sides, blocks, dirt, clouds, spikes, gems and
+// flags.
+func (g *Game) drawTiles(screen *ebiten.Image, cam int) {
+	s := g.stage
+	edge := looks[s].ground[3]
+	c0, c1 := cam/T, min((cam+ScreenWidth)/T+1, g.width)
 	for c := c0; c < c1; c++ {
-		x := c*tile - cam
-		for r := 0; r < rows; r++ {
-			y := r * tile
+		x := c*T - cam
+		for r := range rows {
+			y := r * T
 			switch t := g.level[r][c]; t {
 			case '#':
-				run := r
-				for run < rows && g.level[run][c] == '#' {
-					run++
+				if !g.ground(c, r-1) {
+					drawAt(screen, imageGroundTop[s], x, y)
+				} else {
+					drawAt(screen, imageGround[s][(c*7+r*3)%2], x, y)
 				}
-				fill(screen, lk.ground, x, y, tile, (run-r)*tile)
-				if r == 0 || !solid(g.level[r-1][c]) {
-					fill(screen, lk.top, x, y, tile, 2)
-					fill(screen, lk.edge, x, y+2, tile, 1)
+				if !g.ground(c-1, r) {
+					fill(screen, edge, x, y+4, 2, T-4)
 				}
-				r = run - 1
+				if !g.ground(c+1, r) {
+					fill(screen, edge, x+T-2, y+4, 2, T-4)
+				}
+				if !g.ground(c, r+1) {
+					fill(screen, edge, x, y+T-2, T, 2)
+				}
 			case '=':
-				fill(screen, lk.blockEdge, x, y, tile, tile)
-				fill(screen, lk.block, x+1, y+1, tile-2, tile-2)
+				drawAt(screen, imageBlock[s], x, y)
 			case 'd':
-				fill(screen, lk.dirt, x, y, tile, tile)
-				fill(screen, lk.dirtSpot, x+1, y+2, 2, 1)
-				fill(screen, lk.dirtSpot, x+5, y+5, 2, 1)
-				fill(screen, lk.dirtSpot, x+3, y+6, 1, 1)
+				drawAt(screen, imageDirt[s], x, y)
 			case '-':
 				drawAt(screen, imageCloud, x, y)
 			case '^':
 				drawAt(screen, imageSpike, x, y)
 			case 'o':
-				drawAt(screen, imageGem[(g.ticks/12+c)%2], x+1, y+1)
+				drawAt(screen, imageGem[(g.ticks/12+c)%2], x+2, y+2)
 			case 'C', 'c':
-				fill(screen, poleColor, x+1, y-6, 1, tile+6)
+				fill(screen, poleShade, x+3, y-12, 2, T+12)
+				fill(screen, poleLight, x+3, y-12, 1, T+12)
 				flag := flagRed
 				if t == 'c' {
 					flag = flagGreen
 				}
-				fill(screen, flag, x+2, y-6, 5, 4)
+				for i := range 8 {
+					fill(screen, flag, x+5, y-12+i, 10-abs(i-4)*2, 1)
+				}
 			case 'G':
-				fill(screen, poleColor, x+3, y, 2, tile)
+				fill(screen, poleShade, x+6, y, 4, T)
+				fill(screen, poleLight, x+6, y, 2, T)
 				if r == 0 || g.level[r-1][c] != 'G' {
-					// The PASS flag on top of the pole.
-					wave := g.ticks / 10 % 2
-					fill(screen, flagGreen, x+5, y-1+wave, 19, 8)
-					buf.reset().str("PASS").draw(screen, x+7, y+1+wave, textWhite)
-					fill(screen, textYellow, x+3, y-2, 2, 2)
+					g.drawPass(screen, x, y)
 				}
 			}
 		}
 	}
 }
 
-func (g *Game) drawEnemies(screen *ebiten.Image) {
-	cam := int(g.camera)
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+// drawPass draws the PASS flag waving on top of the goal's pole.
+func (g *Game) drawPass(screen *ebiten.Image, x, y int) {
+	for i := range 40 {
+		wave := tri(i*4+g.ticks*3, 128) / 16
+		h := 18
+		if i == 39 {
+			h = 16
+		}
+		fill(screen, flagGreen, x+10+i, y-2+wave, 1, h)
+		fill(screen, flagDark, x+10+i, y+15+wave, 1, 1)
+	}
+	line.Reset().Str("PASS").Shade(flagDark).Draw(screen, x+19, y+3+tri(g.ticks*3+40, 128)/16, 1, textWhite)
+	fill(screen, knobShade, x+5, y-6, 6, 6)
+	fill(screen, knobColor, x+5, y-6, 4, 4)
+}
+
+func (g *Game) drawEnemies(screen *ebiten.Image, cam int) {
 	frame := g.ticks / 10 % 2
 	for i := range g.enemies {
 		e := &g.enemies[i]
 		if !e.alive {
 			continue
 		}
-		x, y := int(e.x)-cam, int(e.y)
-		if x < -8 || x > ScreenWidth {
+		x, y := int(e.x*zoom)-cam, int(e.y*zoom)
+		if x < -T || x > ScreenWidth {
 			continue
 		}
 		var img *ebiten.Image
@@ -184,16 +262,19 @@ func (g *Game) drawEnemies(screen *ebiten.Image) {
 			img = imageBug[frame]
 		}
 		var op ebiten.DrawImageOptions
-		if e.vx > 0 {
+		if e.vx < 0 {
 			op.GeoM.Scale(-1, 1)
-			op.GeoM.Translate(8, 0)
+			op.GeoM.Translate(T, 0)
 		}
-		op.GeoM.Translate(float64(x), float64(y+tile-img.Bounds().Dy()))
-		put(screen, img, &op)
+		op.GeoM.Translate(float64(x), float64(y+T-img.Bounds().Dy()))
+		screen.DrawImage(img, &op)
 	}
 }
 
-func (g *Game) drawGopher(screen *ebiten.Image) {
+// The gopher's sprite and where it sits on its box.
+const gopherW, gopherH, gopherLeft = 18, 22, (gopherW - boxW*zoom) / 2
+
+func (g *Game) drawGopher(screen *ebiten.Image, cam int) {
 	if g.mode == modePlay && g.hurt > 0 && g.hurt%6 < 3 {
 		return
 	}
@@ -206,19 +287,30 @@ func (g *Game) drawGopher(screen *ebiten.Image) {
 	case g.vx > 0.1 || g.vx < -0.1:
 		frame = 1 + g.ticks/6%2
 	}
-	x := g.x - g.camera - 1.5
-	y := g.y + boxH - 11
+	x := int(g.x*zoom) - cam - gopherLeft
+	y := int((g.y+boxH)*zoom) - gopherH
 	if g.mode == modeDead {
 		// Up and away.
-		y -= float32(g.modeTicks) * 0.6
+		y -= g.modeTicks * 6 / 5
+	}
+	if g.dash > 0 {
+		// Speed lines behind.
+		for i := range 3 {
+			l := 6 + (g.dash+i*3)%5*2
+			lx := x - l - 2
+			if g.facing < 0 {
+				lx = x + gopherW + 2
+			}
+			fill(screen, dashLine, lx, y+7+i*5, l, 1)
+		}
 	}
 	var op ebiten.DrawImageOptions
 	if g.facing < 0 {
 		op.GeoM.Scale(-1, 1)
-		op.GeoM.Translate(9, 0)
+		op.GeoM.Translate(gopherW, 0)
 	}
-	op.GeoM.Translate(float64(int(x)), float64(int(y)))
-	put(screen, imageGopher[frame], &op)
+	op.GeoM.Translate(float64(x), float64(y))
+	screen.DrawImage(imageGopher[frame], &op)
 }
 
 func (g *Game) drawHUD(screen *ebiten.Image) {
@@ -230,59 +322,67 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 		if i >= g.heartsLeft {
 			img = imageHeart[1]
 		}
-		drawAt(screen, img, 2+i*8, 2)
+		drawAt(screen, img, 4+i*16, 4)
 	}
-	drawAt(screen, imageGem[0], 30, 2)
-	buf.reset().str("X").num(g.gems).draw(screen, 37, 3, textWhite)
-	buf.reset().num(g.score).draw(screen, -(ScreenWidth - 2), 3, textWhite)
-	buf.reset().str("GOPHER X").num(g.livesLeft).draw(screen, 62, 3, textWhite)
+	drawAt(screen, imageGem[0], 56, 4)
+	line.Reset().Str("x").Num(g.gems).Shade(textShadow).Draw(screen, 70, 7, 1, textWhite)
+	line.Reset().Str("GOPHER x").Num(g.livesLeft).Shade(textShadow).Draw(screen, 104, 7, 1, textWhite)
+	line.Reset().Num(g.score).Shade(textShadow).Right(screen, ScreenWidth-4, 7, 1, textWhite)
 }
 
 func (g *Game) drawOverlay(screen *ebiten.Image) {
+	const mid = ScreenWidth / 2
 	switch g.mode {
 	case modeTitle:
-		box(screen, 12, 16, 96, 88)
-		debugPrint(screen, "GOPHER JUMP", 27, 14)
+		box(screen, 16, 28, 208, 184)
+		line.Reset().Str("GOPHER JUMP").Shade(boxEdge).Center(screen, mid, 38, 3, textYellow)
 		var op ebiten.DrawImageOptions
 		op.GeoM.Scale(3, 3)
-		op.GeoM.Translate(46, 30)
-		put(screen, imageGopher[3*(g.modeTicks/30%2)], &op)
-		buf.reset().str("A: JUMP  B: DASH").center(screen, 68, textWhite)
-		buf.reset().str("DASH BREAKS DIRT").center(screen, 76, textGray)
+		op.GeoM.Translate(mid-27, 64)
+		screen.DrawImage(imageGopher[3*(g.modeTicks/30%2)], &op)
+		line.Reset().Str("A: JUMP   B: DASH").Center(screen, mid, 140, 1, textWhite)
+		line.Reset().Str("DASH BREAKS DIRT").Center(screen, mid, 154, 1, textGray)
 		if g.modeTicks/30%2 == 0 {
-			buf.reset().str("PRESS A").center(screen, 86, textYellow)
+			line.Reset().Str("PRESS A").Center(screen, mid, 172, 2, textYellow)
 		}
-		buf.reset().str("GOPHER BY RENEE FRENCH").center(screen, 96, textGray)
+		line.Reset().Str("GOPHER BY RENEE FRENCH").Center(screen, mid, 198, 1, textGray)
 	case modeIntro:
-		box(screen, 24, 44, 72, 28)
-		buf.reset().str("STAGE ").num(g.stage+1).center(screen, 50, textGray)
-		buf.reset().str(stages[g.stage].name).center2(screen, 58, textWhite)
+		box(screen, 48, 88, 144, 56)
+		line.Reset().Str("STAGE ").Num(g.stage+1).Center(screen, mid, 96, 1, textGray)
+		line.Reset().Str(stages[g.stage].name).Center(screen, mid, 114, 2, textWhite)
 	case modeDead:
 		if g.modeTicks > 30 {
-			box(screen, 30, 50, 60, 16)
-			buf.reset().str("GOPHER X").num(g.livesLeft).center(screen, 56, textWhite)
+			box(screen, 60, 100, 120, 32)
+			line.Reset().Str("GOPHER x").Num(g.livesLeft).Center(screen, mid, 112, 1, textWhite)
 		}
 	case modeClear:
-		box(screen, 24, 44, 72, 28)
-		buf.reset().str("PASS!").center2(screen, 50, flagGreen)
-		buf.reset().str("SCORE ").num(g.score).center(screen, 64, textWhite)
+		box(screen, 48, 88, 144, 56)
+		line.Reset().Str("PASS!").Center(screen, mid, 98, 2, flagGreen)
+		line.Reset().Str("SCORE ").Num(g.score).Center(screen, mid, 124, 1, textWhite)
 	case modeOver:
-		box(screen, 20, 44, 80, 32)
-		buf.reset().str("GAME OVER").center2(screen, 50, textRed)
-		buf.reset().str("SCORE ").num(g.score).center(screen, 66, textWhite)
+		box(screen, 40, 88, 160, 64)
+		line.Reset().Str("GAME OVER").Center(screen, mid, 100, 2, textRed)
+		line.Reset().Str("SCORE ").Num(g.score).Center(screen, mid, 132, 1, textWhite)
 	case modeEnd:
-		box(screen, 14, 30, 92, 60)
-		buf.reset().str("ALL PASS!").center2(screen, 36, flagGreen)
+		box(screen, 28, 60, 184, 120)
+		line.Reset().Str("ALL PASS!").Center(screen, mid, 72, 2, flagGreen)
 		var op ebiten.DrawImageOptions
 		op.GeoM.Scale(2, 2)
-		op.GeoM.Translate(51, 50)
-		put(screen, imageGopher[3*(g.modeTicks/20%2)], &op)
-		buf.reset().str("SCORE ").num(g.score).center(screen, 76, textYellow)
+		op.GeoM.Translate(mid-18, 96)
+		screen.DrawImage(imageGopher[3*(g.modeTicks/20%2)], &op)
+		line.Reset().Str("SCORE ").Num(g.score).Center(screen, mid, 154, 1, textYellow)
 	}
 }
 
+// box is a dark panel with a two-tone frame, drawn side by side rather than
+// one over another.
 func box(screen *ebiten.Image, x, y, w, h int) {
-	fill(screen, boxEdge, x-1, y-1, w+2, h+2)
+	fill(screen, boxLight, x-2, y-2, w+3, 1)
+	fill(screen, boxEdge, x+w+1, y-2, 1, 1)
+	fill(screen, boxEdge, x-2, y-1, w+4, 1)
+	fill(screen, boxEdge, x-2, y, 2, h)
+	fill(screen, boxEdge, x+w, y, 2, h)
+	fill(screen, boxEdge, x-2, y+h, w+4, 2)
 	fill(screen, boxColor, x, y, w, h)
 }
 
@@ -330,82 +430,11 @@ func fill(screen *ebiten.Image, c color.RGBA, x, y, w, h int) {
 	var op ebiten.DrawImageOptions
 	op.GeoM.Scale(float64(w), float64(h))
 	op.GeoM.Translate(float64(x), float64(y))
-	put(screen, paint(c), &op)
+	screen.DrawImage(paint(c), &op)
 }
 
 func drawAt(screen, img *ebiten.Image, x, y int) {
 	var op ebiten.DrawImageOptions
 	op.GeoM.Translate(float64(x), float64(y))
-	put(screen, img, &op)
-}
-
-// text builds a line of the 3x5 font in a fixed buffer, so that drawing
-// numbers makes no strings and does not allocate.
-type text struct {
-	b [32]byte
-	n int
-}
-
-var buf text
-
-func (t *text) reset() *text { t.n = 0; return t }
-
-func (t *text) str(s string) *text {
-	for i := range len(s) {
-		if t.n < len(t.b) {
-			t.b[t.n] = s[i]
-			t.n++
-		}
-	}
-	return t
-}
-
-func (t *text) num(n int) *text {
-	var d [10]byte
-	i := len(d)
-	for {
-		i--
-		d[i] = byte('0' + n%10)
-		n /= 10
-		if n == 0 {
-			break
-		}
-	}
-	for ; i < len(d) && t.n < len(t.b); i++ {
-		t.b[t.n] = d[i]
-		t.n++
-	}
-	return t
-}
-
-// draw draws the line with its left edge at x, or its right edge at -x.
-func (t *text) draw(screen *ebiten.Image, x, y int, c color.RGBA) {
-	if x < 0 {
-		x = -x - t.n*4 + 1
-	}
-	drawText(screen, t.b[:t.n], x, y, 1, c)
-}
-
-func (t *text) center(screen *ebiten.Image, y int, c color.RGBA) {
-	drawText(screen, t.b[:t.n], (ScreenWidth-t.n*4)/2, y, 1, c)
-}
-
-func (t *text) center2(screen *ebiten.Image, y int, c color.RGBA) {
-	drawText(screen, t.b[:t.n], (ScreenWidth-t.n*8)/2, y, 2, c)
-}
-
-func drawText(screen *ebiten.Image, text []byte, x, y, scale int, c color.RGBA) {
-	var op ebiten.DrawImageOptions
-	for i, ch := range text {
-		img := imageGlyph[ch]
-		if img == nil {
-			continue
-		}
-		op.GeoM.Reset()
-		op.GeoM.Scale(float64(scale), float64(scale))
-		op.GeoM.Translate(float64(x+i*4*scale), float64(y))
-		op.ColorScale.Reset()
-		op.ColorScale.Scale(float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, 1)
-		put(screen, img, &op)
-	}
+	screen.DrawImage(img, &op)
 }

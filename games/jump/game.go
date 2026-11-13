@@ -16,11 +16,16 @@ import (
 )
 
 const (
-	ScreenWidth  = 120
-	ScreenHeight = 120
+	ScreenWidth  = 240
+	ScreenHeight = 240
 	tps          = 60
-	tile         = 8
+	tile         = 8 // in the game's pixels
 	rows         = 15
+
+	// The game runs in pixels of its own, half the screen's: zoom screen
+	// pixels to each way. view is how much of the stage shows across.
+	zoom = 2
+	view = ScreenWidth / zoom
 
 	// The gopher's box, in pixels, from the left and the top of its
 	// position.
@@ -103,11 +108,13 @@ type Game struct {
 
 	enemies [maxEnemies]enemy
 
-	// The heights of the far and the near hills under each screen column.
+	// The heights of the far and the near hills over each screen column.
 	far, near [ScreenWidth]int
 }
 
 func NewGame() *Game {
+	// Draw covers the whole screen anyway.
+	ebiten.SetScreenClearedEveryFrame(false)
 	g := &Game{}
 	g.startStage(0)
 	g.mode = modeTitle
@@ -159,15 +166,13 @@ func (g *Game) respawn() {
 	g.facing = 1
 	g.dash, g.hurt, g.jumpPressed = 0, 0, 99
 	g.onGround, g.jumping = false, false
-	g.camera = max(0, min(g.x-40, float32(g.width*tile-ScreenWidth)))
+	g.camera = max(0, min(g.x-40, float32(g.width*tile-view)))
 }
 
 func pressed(k ebiten.Key) bool { return inpututil.IsKeyJustPressed(k) }
 
-// Layout gives a screen pixelScale times the game's 120 by 120: the game
-// keeps its coordinates and draws everything that much larger.
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return ScreenWidth * pixelScale, ScreenHeight * pixelScale
+	return ScreenWidth, ScreenHeight
 }
 
 // input is what the player does in one tick.
@@ -272,7 +277,7 @@ func (g *Game) step(in input) {
 		want = g.x - 66
 	}
 	g.camera += (want - g.camera) * 0.1
-	g.camera = max(0, min(g.camera, float32(g.width*tile-ScreenWidth)))
+	g.camera = max(0, min(g.camera, float32(g.width*tile-view)))
 	if g.hurt > 0 {
 		g.hurt--
 	}
@@ -418,7 +423,7 @@ func (g *Game) updateEnemies() {
 			continue
 		}
 		// Enemies far from the view wait.
-		if e.x < g.camera-40 || e.x > g.camera+ScreenWidth+40 {
+		if e.x < g.camera-40 || e.x > g.camera+view+40 {
 			continue
 		}
 		switch e.kind {

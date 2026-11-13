@@ -325,14 +325,28 @@ func integer(dst, src View, o Options) {
 		case plain && opaque:
 			// Each source pixel fills a run, such as a 1x1 image scaled to a rectangle.
 			out := dst.Buffer.Pixels[di : di+n]
-			column, run := firstColumn, sx-firstRepeat
-			for i := 0; i < n; column, run = column+1, sx {
-				v := src.Buffer.Pixel(si + column)
-				for end := min(n, i+run); i < end; i++ {
-					out[i] = v
+			if y > y0 && (y-ty)/sy == (y-1-ty)/sy {
+				// The same source row as the row above: copy that.
+				copy(out, dst.Buffer.Pixels[di-dst.Stride:])
+			} else if src.Bounds.Dx() == 1 {
+				// One color across: double what is filled until it is full.
+				out[0] = src.Buffer.Pixel(si)
+				for k := 1; k < n; k *= 2 {
+					copy(out[k:], out[:k])
+				}
+			} else {
+				column, run := firstColumn, sx-firstRepeat
+				for i := 0; i < n; column, run = column+1, sx {
+					v := src.Buffer.Pixel(si + column)
+					for end := min(n, i+run); i < end; i++ {
+						out[i] = v
+					}
 				}
 			}
-			dst.Buffer.SetMaskRange(di, n, true)
+			// An opaque destination's mask bits are already set.
+			if !dst.Buffer.Opaque {
+				dst.Buffer.SetMaskRange(di, n, true)
+			}
 		default:
 			column, repeat := firstColumn, firstRepeat
 			for i := 0; i < n; i++ {

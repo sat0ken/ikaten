@@ -328,7 +328,7 @@ func TestDrawOnlyChanges(t *testing.T) {
 		t.Fatal("the screen is still cleared every frame")
 	}
 	g.newMatch()
-	w, h := ScreenWidth*pixelScale, ScreenHeight*pixelScale
+	w, h := ScreenWidth, ScreenHeight
 	kept := ebiten.NewImage(w, h)
 	pixels, want := make([]byte, 4*w*h), make([]byte, 4*w*h)
 	checked := 0
@@ -362,4 +362,29 @@ func TestDrawOnlyChanges(t *testing.T) {
 		checked++
 	}
 	t.Logf("%d frames compared", checked)
+}
+
+// Drawing a frame allocates nothing, all of it or only what changed.
+func TestDrawAllocs(t *testing.T) {
+	screen := ebiten.NewImage(ScreenWidth, ScreenHeight)
+	g := NewGame()
+	g.newMatch()
+	for range 400 {
+		g.ticks++
+		g.step(g.cpu(0))
+	}
+	for _, full := range []bool{true, false} {
+		g.Draw(screen)
+		n := testing.AllocsPerRun(20, func() {
+			if full {
+				g.paintedOn = nil
+			}
+			g.ticks++
+			g.step(g.cpu(0))
+			g.Draw(screen)
+		})
+		if n != 0 {
+			t.Errorf("full %v: %v allocations", full, n)
+		}
+	}
 }

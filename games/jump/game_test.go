@@ -329,24 +329,6 @@ func TestKeys(t *testing.T) {
 }
 
 // Every letter the screens use has a glyph.
-func TestGlyphs(t *testing.T) {
-	for _, s := range []string{"GOPHER JUMP", "A: JUMP  B: DASH", "DASH BREAKS DIRT", "PRESS A", "GOPHER BY RENEE FRENCH",
-		"STAGE ", "PASS!", "SCORE ", "GAME OVER", "ALL PASS!", "GOPHER X", "X"} {
-		for i := range len(s) {
-			if imageGlyph[s[i]] == nil {
-				t.Errorf("no glyph for %q in %q", s[i], s)
-			}
-		}
-	}
-	for _, st := range stages {
-		for i := range len(st.name) {
-			if imageGlyph[st.name[i]] == nil {
-				t.Errorf("no glyph for %q in %q", st.name[i], st.name)
-			}
-		}
-	}
-}
-
 // Behind the title the gopher runs the meadow on its own, for the benchmark
 // and for show, and the title stays.
 func TestTitleDemo(t *testing.T) {
@@ -358,5 +340,22 @@ func TestTitleDemo(t *testing.T) {
 	}
 	if g.mode != modeTitle || far < 60*tile {
 		t.Fatalf("mode %d, the demo got to column %d", g.mode, int(far)/tile)
+	}
+}
+
+// Drawing a frame allocates nothing, in each stage and with the boxes over
+// the play.
+func TestDrawAllocs(t *testing.T) {
+	screen := ebiten.NewImage(ScreenWidth, ScreenHeight)
+	for stage := range stages {
+		g := playing(stage)
+		g.dash = 5
+		for _, m := range []mode{modePlay, modeTitle, modeIntro, modeClear, modeOver, modeEnd} {
+			g.mode = m
+			g.Draw(screen)
+			if n := testing.AllocsPerRun(5, func() { g.ticks++; g.Draw(screen) }); n != 0 {
+				t.Errorf("stage %d, mode %d: %v allocations", stage, m, n)
+			}
+		}
 	}
 }
