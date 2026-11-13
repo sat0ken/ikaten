@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	ScreenWidth  = 120
-	ScreenHeight = 120
+	ScreenWidth  = 240
+	ScreenHeight = 240
 	tps          = 60
 
 	// The handle: EB, B8 to B1, N, P1 to P5.

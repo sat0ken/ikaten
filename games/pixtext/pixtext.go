@@ -33,7 +33,7 @@ type font struct {
 // right color is much faster than shading a white one pixel by pixel.
 var (
 	white    font
-	fonts    [6]font
+	fonts    [8]font
 	fontTick int
 )
 

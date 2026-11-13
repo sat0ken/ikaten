@@ -1,205 +1,300 @@
 package train
 
 import (
-	"image"
 	"image/color"
 
 	ebiten "github.com/sat0ken/ikaten"
+	"github.com/sat0ken/ikaten/games/pixtext"
 )
 
 // Sprites are pixel art written as strings; '.' is transparent.
 var palette = map[byte]color.RGBA{
-	'K': {24, 24, 28, 255},
-	'k': {70, 70, 76, 255},
-	'g': {130, 130, 136, 255},
-	'W': {240, 240, 236, 255},
-	'R': {220, 40, 30, 255},
-	'r': {120, 30, 24, 255},
-	'Y': {250, 210, 40, 255},
 	'B': {40, 80, 170, 255},
-	'b': {120, 160, 210, 255},
-	'G': {50, 120, 50, 255},
-	'd': {30, 80, 36, 255},
-	'T': {110, 74, 40, 255},
+	'C': {150, 64, 52, 255},
+	'D': {24, 60, 30, 255},
+	'G': {60, 130, 56, 255},
+	'K': {24, 24, 28, 255},
+	'L': {110, 170, 90, 255},
+	'R': {220, 40, 30, 255},
 	'S': {200, 190, 170, 255},
-	's': {160, 150, 132, 255},
-	'O': {230, 120, 40, 255},
-	'C': {140, 60, 50, 255},
+	'T': {110, 74, 40, 255},
+	'W': {240, 240, 236, 255},
+	'Y': {250, 210, 40, 255},
+	'b': {120, 160, 210, 255},
 	'c': {90, 96, 120, 255},
+	'd': {34, 90, 40, 255},
+	'g': {130, 130, 136, 255},
+	'k': {70, 70, 76, 255},
+	'r': {120, 30, 24, 255},
+	's': {160, 150, 132, 255},
+	't': {140, 100, 60, 255},
 }
 
 var treeArt = []string{
-	"...GGG...",
-	"..GGdGG..",
-	".GGGGGdG.",
-	"GGdGGGGGG",
-	"GGGGGdGGG",
-	".GdGGGGG.",
-	"..GGGdG..",
-	"....T....",
-	"....T....",
+	"......DDDDDD......",
+	"....DDLGGGGGDD....",
+	"...DLLLLLGGGGGD...",
+	"..DGLLLLLGGGGGGD..",
+	".DGLdLLLLLGGGGGGD.",
+	".DGGLLLLLGdGGGGdD.",
+	".DGdLLLLLGGGGGddD.",
+	".DGGGGdGGGGdGdddD.",
+	".DGGGGGGGGGGddddD.",
+	".DGddGGGGGGdddddD.",
+	".DGGGGGGGGddddddD.",
+	"..DGGGGGGddGdddD..",
+	"...DddddddddddD...",
+	"....DDddddddDD....",
+	"......DDtTDD......",
+	"........tT........",
+	"........TT........",
+	"........TT........",
+	"........TT........",
+	"........TT........",
 }
 
 var pineArt = []string{
-	"...d...",
-	"..dGd..",
-	"..GdG..",
-	".dGGGd.",
-	".GdGdG.",
-	"dGGdGGd",
-	"...T...",
-	"...T...",
+	"......DD......",
+	"......DD......",
+	"......DD......",
+	".....DGdD.....",
+	".....DGdD.....",
+	".....DGdD.....",
+	"....DGGddD....",
+	".....DGdD.....",
+	"....DGGddD....",
+	"....DGGddD....",
+	"...DGGGdddD...",
+	"...DGGGdddD...",
+	"...DGGGdddD...",
+	"...DGGGdddD...",
+	"..DGGGGddddD..",
+	"..DGGGGddddD..",
+	".DDDDDGdDDDDD.",
+	"......TT......",
+	"......TT......",
+	"......TT......",
+	"......TT......",
+	"......TT......",
 }
 
 var houseArt = [2][]string{{
-	"....CCCCCCCC....",
-	"...CCCCCCCCCC...",
-	"..CCCCCCCCCCCC..",
-	".CCCCCCCCCCCCCC.",
-	"..SSSSSSSSSSSS..",
-	"..SbbSSSSSSbbS..",
-	"..SbbSSSSSSbbS..",
-	"..SSSSSTTSSSSS..",
-	"..SSSSSTTSSSSS..",
+	"........CCCCCCCCCCCCCCCC........",
+	".......CCCCCCCCCCCCCCCCCC.......",
+	"......CrCCrCCrCCrCCrCCrCkkk.....",
+	".....CCCCCCCCCCCCCCCCCCCkkk.....",
+	"....rCCrCCrCCrCCrCCrCCrCkkkC....",
+	"...CCCCCCCCCCCCCCCCCCCCCkkkCC...",
+	"..CCrCCrCCrCCrCCrCCrCCrCkkkCrC..",
+	".CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC.",
+	"rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+	"...ssssssssssssssssssssssssss...",
+	"...SSSSSSSSSSSSSSSSSSSSSSSSSS...",
+	"...SSSkkWkkkSSSSSSSSkkWkkkSSS...",
+	"...SSSbbWbbbSSSSSSSSbbWbbbSSS...",
+	"...SSSWWWWWWSSTTTTSSWWWWWWSSS...",
+	"...SSSbbWbbbSSTTTTSSbbWbbbSSS...",
+	"...SSSbbWbbbSSTTTTSSbbWbbbSSS...",
+	"...SSSssssssSSTTTTSSssssssSSS...",
+	"...SSSSSSSSSSSTTTYSSSSSSSSSSS...",
+	"...SSSSSSSSSSSTTTTSSSSSSSSSSS...",
+	"...SSSSSSSSSSSTTTTSSSSSSSSSSS...",
+	"...SSSSSSSSSSSTTTTSSSSSSSSSSS...",
+	"...SSSSSSSSSSSTTTTSSSSSSSSSSS...",
 }, {
-	"cccccccccccc",
-	"cSSSSSSSSSSc",
-	"cSbbSbbSbbSc",
-	"cSSSSSSSSSSc",
-	"cSbbSbbSbbSc",
-	"cSSSSSSSSSSc",
-	"cSbbSbbSbbSc",
-	"cSSSSSSSSSSc",
-	"cSSSSTTSSSSc",
-	"cSSSSTTSSSSc",
+	"kkkkkkkkkkkkkkkkkkkkkkks",
+	"kccccccccccccccccccccccs",
+	"kSSSSSSSSSSSSSSSSSSSSSSs",
+	"kSWbbSSSWbbSSSWbbSSSWbbs",
+	"kSbbbSSSbbbSSSbbbSSSbbbs",
+	"kSbbbSSSbbbSSSbbbSSSbbbs",
+	"ksssssssssssssssssssssss",
+	"kSSSSSSSSSSSSSSSSSSSSSSs",
+	"kSWbbSSSWbbSSSWbbSSSWbbs",
+	"kSbbbSSSbbbSSSbbbSSSbbbs",
+	"kSbbbSSSbbbSSSbbbSSSbbbs",
+	"ksssssssssssssssssssssss",
+	"kSSSSSSSSSSSSSSSSSSSSSSs",
+	"kSWbbSSSWbbSSSWbbSSSWbbs",
+	"kSbbbSSSbbbSSSbbbSSSbbbs",
+	"kSbbbSSSbbbSSSbbbSSSbbbs",
+	"ksssssssssssssssssssssss",
+	"kSSSSSSSSSSSSSSSSSSSSSSs",
+	"kSWbbSSSWbbSSSWbbSSSWbbs",
+	"kSbbbSSSbbbSSSbbbSSSbbbs",
+	"kSbbbSSSbbbSSSbbbSSSbbbs",
+	"ksssssssssssssssssssssss",
+	"kSSSSSSSSSSSSSSSSSSSSSSs",
+	"kSWbbSSSWbbSSSWbbSSSWbbs",
+	"kSbbbSSSbbbSSSbbbSSSbbbs",
+	"kSbbbSSSbbbSSSbbbSSSbbbs",
+	"ksssssssssTTTTssssssssss",
+	"kSSSSSSSSSTTTTSSSSSSSSSs",
+	"kSSSSSSSSSTTTTSSSSSSSSSs",
+	"kkkkkkkkkkTTTTkkkkkkkkks",
 }}
 
 // The board that marks where the front of the train stops.
 var stopMarkArt = []string{
-	"KKKKKKK",
-	"KYYYYYK",
-	"KYKKKYK",
-	"KYYKYYK",
-	"KYYKYYK",
-	"KYYYYYK",
-	"KKKKKKK",
-	"...k...",
-	"...k...",
-	"...k...",
-	"...k...",
+	"KKKKKKKKKKKKKK",
+	"KYYYYYYYYYYYYK",
+	"KYYYYYYYYYYYYK",
+	"KYYKKKKKKKKYYK",
+	"KYYKKKKKKKKYYK",
+	"KYYYYYKKYYYYYK",
+	"KYYYYYKKYYYYYK",
+	"KYYYYYKKYYYYYK",
+	"KYYYYYKKYYYYYK",
+	"KYYYYYYYYYYYYK",
+	"KYYYYYYYYYYYYK",
+	"KKKKKKKKKKKKKK",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
 }
 
+// The board that asks for the horn before a crossing.
 var whistleArt = []string{
-	"KKKKKKK",
-	"KWWWWWK",
-	"KWKWKWK",
-	"KWKWKWK",
-	"KWWKWWK",
-	"KWWWWWK",
-	"KKKKKKK",
-	"...k...",
-	"...k...",
-	"...k...",
-	"...k...",
-	"...k...",
+	"KKKKKKKKKKKKKK",
+	"KWWWWWWWWWWWWK",
+	"KWWWWWWWWWWWWK",
+	"KWWWWWWWWWWWWK",
+	"KWWKWWWWWWKWWK",
+	"KWWKWWWWWWKWWK",
+	"KWWKWWKKWWKWWK",
+	"KWWKWKWWKWKWWK",
+	"KWWWKWWWWKWWWK",
+	"KWWWKWWWWKWWWK",
+	"KWWWWWWWWWWWWK",
+	"KWWWWWWWWWWWWK",
+	"KWWWWWWWWWWWWK",
+	"KKKKKKKKKKKKKK",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
+	"......gk......",
 }
 
+// A crossing's signal: its lamps flash in turn.
 var crossingArt = [2][]string{{
-	"WR.RW",
-	"RRkRR",
-	"RRkRR",
-	"..k..",
-	"YKYKY",
-	"..k..",
-	"..k..",
-	"..k..",
-	"..k..",
-	"..k..",
+	"......kk......",
+	".W....kk....W.",
+	".WW...kk...WW.",
+	"..WW..kk..WW..",
+	"...WR.kk.RW...",
+	"....RRkkRR....",
+	".....RkkR.....",
+	"......kk......",
+	".....WkkW.....",
+	"....WWkkWW....",
+	"...RW.kk.WR...",
+	"..RR..kk..RR..",
+	".RR...kk...RR.",
+	".R....kk....R.",
+	"......kk......",
+	".KKKK.kk.KKKK.",
+	".KRRK.kk.KrrK.",
+	".KRRK.kk.KrrK.",
+	".KKKK.kk.KKKK.",
+	"......kk......",
+	"......kk......",
+	".KYYKYYKYYKYY.",
+	".YKYYKYYKYYKY.",
+	"......kk......",
+	"......kk......",
+	"......kk......",
 }, {
-	"Wr.rW",
-	"rrkrr",
-	"rrkrr",
-	"..k..",
-	"KYKYK",
-	"..k..",
-	"..k..",
-	"..k..",
-	"..k..",
-	"..k..",
+	"......kk......",
+	".W....kk....W.",
+	".WW...kk...WW.",
+	"..WW..kk..WW..",
+	"...WR.kk.RW...",
+	"....RRkkRR....",
+	".....RkkR.....",
+	"......kk......",
+	".....WkkW.....",
+	"....WWkkWW....",
+	"...RW.kk.WR...",
+	"..RR..kk..RR..",
+	".RR...kk...RR.",
+	".R....kk....R.",
+	"......kk......",
+	".KKKK.kk.KKKK.",
+	".KrrK.kk.KRRK.",
+	".KrrK.kk.KRRK.",
+	".KKKK.kk.KKKK.",
+	"......kk......",
+	"......kk......",
+	".KYYKYYKYYKYY.",
+	".YKYYKYYKYYKY.",
+	"......kk......",
+	"......kk......",
+	"......kk......",
 }}
 
-// The roadside warning of a lit crossing: lights alternate.
-var lampArt = [2][]string{{"RR..", "RR.."}, {"..RR", "..RR"}}
-
 var bufferArt = []string{
-	"RWRWRWRWRW",
-	"WRWRWRWRWR",
-	"kkkkkkkkkk",
-	"k..k..k..k",
-	"k..k..k..k",
+	"RRRWWWRRRWWWRRRWWWRR",
+	"RRWWWRRRWWWRRRWWWRRR",
+	"RWWWRRRWWWRRRWWWRRRW",
+	"WWWRRRWWWRRRWWWRRRWW",
+	"WWRRRWWWRRRWWWRRRWWW",
+	"KKKKKKKKKKKKKKKKKKKK",
+	".kk......kk.......kk",
+	".kk......kk.......kk",
+	".kk......kk.......kk",
+	"kkkkkkkkkkkkkkkkkkkk",
+	".kk......kk.......kk",
+	".kk......kk.......kk",
 }
 
+// The board with the station's name, before the platform.
 var nameBoardArt = []string{
-	"kkkkkkkkkkkkkkkkkk",
-	"kWWWWWWWWWWWWWWWWk",
-	"kWWKKWKKKWKWKKWWWk",
-	"kWWWWWWWWWWWWWWWWk",
-	"kBBBBBBBBBBBBBBBBk",
-	"kWWWWWWWWWWWWWWWWk",
-	"kkkkkkkkkkkkkkkkkk",
-	"...k..........k...",
-	"...k..........k...",
+	"kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+	"kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk",
+	"kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk",
+	"kWWWWKWWWKWKWWWKWKWWWKWKWWWKWKWWWWWk",
+	"kWWWWKWWWKWKWWWKWKWWWKWKWWWKWKWWWWWk",
+	"kWWWWKWWWKWKWWWKWKWWWKWKWWWKWKWWWWWk",
+	"kWWWWKWWWKWKWWWKWKWWWKWKWWWKWKWWWWWk",
+	"kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk",
+	"kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk",
+	"kBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBk",
+	"kBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBk",
+	"kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk",
+	"kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk",
+	"kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+	"......kk....................kk......",
+	"......kk....................kk......",
+	"......kk....................kk......",
+	"......kk....................kk......",
 }
-
-// glyphs is a 3x5 font for the gauges.
-var glyphs = map[byte][5]string{
-	'0':  {"###", "#.#", "#.#", "#.#", "###"},
-	'1':  {".#.", "##.", ".#.", ".#.", "###"},
-	'2':  {"###", "..#", "###", "#..", "###"},
-	'3':  {"###", "..#", "###", "..#", "###"},
-	'4':  {"#.#", "#.#", "###", "..#", "..#"},
-	'5':  {"###", "#..", "###", "..#", "###"},
-	'6':  {"###", "#..", "###", "#.#", "###"},
-	'7':  {"###", "..#", "..#", ".#.", ".#."},
-	'8':  {"###", "#.#", "###", "#.#", "###"},
-	'9':  {"###", "#.#", "###", "..#", "###"},
-	':':  {"...", ".#.", "...", ".#.", "..."},
-	'.':  {"...", "...", "...", "...", ".#."},
-	'+':  {"...", ".#.", "###", ".#.", "..."},
-	'-':  {"...", "...", "###", "...", "..."},
-	'm':  {"...", "#.#", "###", "#.#", "#.#"},
-	's':  {"...", ".##", "##.", "..#", "##."},
-	'A':  {".#.", "#.#", "###", "#.#", "#.#"},
-	'C':  {".##", "#..", "#..", "#..", ".##"},
-	'D':  {"##.", "#.#", "#.#", "#.#", "##."},
-	'S':  {".##", "#..", ".#.", "..#", "##."},
-	'P':  {"##.", "#.#", "##.", "#..", "#.."},
-	'B':  {"##.", "#.#", "##.", "#.#", "##."},
-	'N':  {"##.", "#.#", "#.#", "#.#", "#.#"},
-	'E':  {"###", "#..", "##.", "#..", "###"},
-	'>':  {"#..", ".#.", "..#", ".#.", "#.."},
-	'/':  {"..#", "..#", ".#.", "#..", "#.."},
-	'\\': {"#..", "#..", ".#.", "..#", "..#"},
-	' ':  {"...", "...", "...", "...", "..."},
-}
-
-const glyphOrder = "0123456789:.+-msACDSPBNE>/\\ "
 
 const (
-	hillWidth  = 160
-	hillHeight = 12
+	hillWidth  = 320
+	hillHeight = 24
 )
 
 var (
 	imageTree, imagePine, imageStopMark   *ebiten.Image
 	imageWhistle, imageBuffer, imageBoard *ebiten.Image
 	imageHouse                            [2]*ebiten.Image
-	imageCrossing, imageLamp              [2]*ebiten.Image
+	imageCrossing                         [2]*ebiten.Image
 	imageHills                            *ebiten.Image
-	imageGlyph                            [256]*ebiten.Image
 	imageLimit                            [100]*ebiten.Image // speed limit signs by km/h
 	imageDistance                         [4]*ebiten.Image   // boards 100, 200 and 300 m before a stop
-	imagePixel                            *ebiten.Image      // white, tinted with ColorScale
 )
 
 func sprite(rows []string) *ebiten.Image {
@@ -214,53 +309,46 @@ func sprite(rows []string) *ebiten.Image {
 	return img
 }
 
-// drawGlyph writes a character into img in the 3x5 font.
-func drawGlyph(img *ebiten.Image, ch byte, x, y int, c color.RGBA) {
-	for gy, row := range glyphs[ch] {
-		for gx := range len(row) {
-			if row[gx] == '#' {
-				img.Set(x+gx, y+gy, c)
-			}
-		}
-	}
-}
+var signText pixtext.Line
 
-// limitSign is a round sign, red ring on white, with the limit in km/h.
+// limitSign is a round sign, red ring on white, with the limit in km/h, on
+// a post.
 func limitSign(kmh int) *ebiten.Image {
-	img := ebiten.NewImage(11, 16)
-	for y := range 11 {
-		for x := range 11 {
-			switch d := (x-5)*(x-5) + (y-5)*(y-5); {
-			case d <= 15:
+	img := ebiten.NewImage(22, 32)
+	for y := range 22 {
+		for x := range 22 {
+			switch d := (2*x-21)*(2*x-21) + (2*y-21)*(2*y-21); {
+			case d <= 15*15:
 				img.Set(x, y, palette['W'])
-			case d <= 31:
+			case d <= 21*21:
 				img.Set(x, y, palette['R'])
 			}
 		}
 	}
-	drawGlyph(img, byte('0'+kmh/10), 2, 3, palette['K'])
-	drawGlyph(img, byte('0'+kmh%10), 6, 3, palette['K'])
-	for y := 11; y < 16; y++ {
-		img.Set(5, y, palette['k'])
+	signText.Reset().Num(kmh).Center(img, 11, 8, 1, palette['K'])
+	for y := 22; y < 32; y++ {
+		img.Set(10, y, palette['g'])
+		img.Set(11, y, palette['k'])
 	}
 	return img
 }
 
 // distanceBoard counts down to a stop mark in hundreds of meters.
 func distanceBoard(n int) *ebiten.Image {
-	img := ebiten.NewImage(7, 12)
-	for y := range 7 {
-		for x := range 7 {
+	img := ebiten.NewImage(14, 26)
+	for y := range 14 {
+		for x := range 14 {
 			c := palette['W']
-			if x == 0 || y == 0 || x == 6 || y == 6 {
+			if x < 2 || y < 2 || x > 11 || y > 11 {
 				c = palette['B']
 			}
 			img.Set(x, y, c)
 		}
 	}
-	drawGlyph(img, byte('0'+n), 2, 1, palette['K'])
-	for y := 7; y < 12; y++ {
-		img.Set(3, y, palette['k'])
+	signText.Reset().Num(n).Center(img, 7, 4, 1, palette['K'])
+	for y := 14; y < 26; y++ {
+		img.Set(6, y, palette['g'])
+		img.Set(7, y, palette['k'])
 	}
 	return img
 }
@@ -281,30 +369,36 @@ func isin(a int) int {
 	return sign * 4000 * p / (40500 - p)
 }
 
-// hills is a strip of distant hills that repeats every hillWidth pixels.
+// hills is a strip of distant hills that repeats every hillWidth pixels:
+// far blue ridges, and green ones nearer with a lighter crest.
 func hills() *ebiten.Image {
 	img := ebiten.NewImage(hillWidth, hillHeight)
 	// TinyGo runs a loop at compile time only up to 1000 iterations, so the
 	// strip is drawn in parts.
-	for x := 0; x < hillWidth; x += 40 {
-		hillColumns(img, x, x+40)
+	for x := 0; x < hillWidth; x += 20 {
+		hillColumns(img, x, x+20)
 	}
 	return img
 }
 
 func hillColumns(img *ebiten.Image, from, to int) {
-	far, near := color.RGBA{120, 150, 170, 255}, color.RGBA{96, 130, 120, 255}
+	far, farTop := color.RGBA{120, 150, 170, 255}, color.RGBA{150, 176, 194, 255}
+	near, nearTop := color.RGBA{96, 130, 120, 255}, color.RGBA{120, 154, 130, 255}
 	for x := from; x < to; x++ {
 		t := x * 360 / hillWidth
 		// Heights in thousandths of a pixel.
-		h1 := 7000 + 3*isin(t*2+29) + 3*isin(t*5)/2
-		h2 := 3000 + 2*isin(t*3+115) + isin(t*7+57)
+		h1 := 14000 + 6*isin(t*2+29) + 3*isin(t*5)
+		h2 := 6000 + 4*isin(t*3+115) + 2*isin(t*7+57)
 		for y := range hillHeight {
 			switch up := (hillHeight - y) * 1000; {
-			case up <= h2:
+			case up <= h2-1000:
 				img.Set(x, y, near)
-			case up <= h1:
+			case up <= h2:
+				img.Set(x, y, nearTop)
+			case up <= h1-1000:
 				img.Set(x, y, far)
+			case up <= h1:
+				img.Set(x, y, farTop)
 			}
 		}
 	}
@@ -320,17 +414,8 @@ func init() {
 	for i := range 2 {
 		imageHouse[i] = sprite(houseArt[i])
 		imageCrossing[i] = sprite(crossingArt[i])
-		imageLamp[i] = sprite(lampArt[i])
 	}
 	imageHills = hills()
-	font := ebiten.NewImage(len(glyphOrder)*4, 5)
-	for i := range len(glyphOrder) {
-		drawGlyph(font, glyphOrder[i], i*4, 0, color.RGBA{255, 255, 255, 255})
-	}
-	// SubImage allocates, so the glyphs are cut once here.
-	for i := range len(glyphOrder) {
-		imageGlyph[glyphOrder[i]] = font.SubImage(image.Rect(i*4, 0, i*4+3, 5)).(*ebiten.Image)
-	}
 	for _, l := range limits {
 		if imageLimit[l.kmh] == nil {
 			imageLimit[l.kmh] = limitSign(l.kmh)
@@ -339,6 +424,4 @@ func init() {
 	for n := 1; n <= 3; n++ {
 		imageDistance[n] = distanceBoard(n)
 	}
-	imagePixel = ebiten.NewImage(1, 1)
-	imagePixel.Fill(color.RGBA{255, 255, 255, 255})
 }
