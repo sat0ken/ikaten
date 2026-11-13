@@ -83,3 +83,58 @@ func TestMaskedBytes(t *testing.T) {
 		}
 	}
 }
+
+// Images flipped left to right take their own path; it must draw as the
+// general path does, clipped on either side, scaled down, from opaque and
+// masked images in RAM and in flash data, onto opaque and see-through
+// destinations, copying and blending.
+func TestMirrored(t *testing.T) {
+	const w, h = 11, 4
+	pixels := make([]uint16, w*h)
+	data := make([]byte, 2*w*h)
+	mask := make([]byte, (w*h+7)/8)
+	for i := range pixels {
+		pixels[i] = uint16(i*7919 + 3)
+		data[2*i], data[2*i+1] = byte(pixels[i]), byte(pixels[i]>>8)
+	}
+	for i := range mask {
+		mask[i] = byte(i*37 + 0x5b)
+	}
+	sources := []*Buffer{
+		{Pixels: pixels, Mask: mask},
+		{Pixels: pixels, Opaque: true},
+		{Data: data, Mask: mask},
+	}
+	for si, sb := range sources {
+		src := View{Buffer: sb, Bounds: image.Rect(0, 0, w, h), Stride: w}
+		for _, opaqueDst := range []bool{false, true} {
+			for _, blend := range []Blend{SourceOver, Copy} {
+				for _, d := range []float32{1, 2} {
+					for tx := -3; tx < 24; tx++ {
+						var got, want View
+						for k, v := range []*View{&got, &want} {
+							dp := make([]uint16, 20*12)
+							dm := make([]byte, 20*12/8)
+							for i := range dp {
+								dp[i] = 0x1111
+							}
+							if opaqueDst {
+								for i := range dm {
+									dm[i] = 0xff
+								}
+							}
+							*v = View{Buffer: &Buffer{Pixels: dp, Mask: dm, Opaque: opaqueDst}, Bounds: image.Rect(0, 0, 20, 12), Stride: 20}
+							o := Options{A: -1, D: d, TX: float32(tx), TY: 1, R: 256, G: 256, Blue: 256, Alpha: 256, Blend: blend}
+							draw(*v, src, o, k == 1)
+						}
+						for i := range got.Buffer.Pixels {
+							if got.Buffer.Pixels[i] != want.Buffer.Pixels[i] || got.Buffer.Visible(i) != want.Buffer.Visible(i) {
+								t.Fatalf("source %d opaque %v blend %d scale %v tx %d: pixel %d is %x, want %x", si, opaqueDst, blend, d, tx, i, got.Buffer.Pixels[i], want.Buffer.Pixels[i])
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

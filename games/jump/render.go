@@ -77,11 +77,14 @@ const cloudSpan = 4 * 180
 
 // A ridge of hills behind: its height over each column comes round every
 // period columns, and is between low and high. The part above low is drawn
-// once into an image a period wide, which is drawn side by side as the view
-// scrolls; below low is one rectangle.
+// into an image a period wide when the stage changes, already in the stage's
+// height (div) and colors, and then drawn side by side as the view scrolls;
+// below low is one rectangle. In the cave a squashed copy hangs from the
+// roof too.
 type ridge struct {
 	period, low, high int
-	img               *ebiten.Image
+	img, roof         *ebiten.Image
+	div               int // the image's heights are divided by this
 }
 
 func (r *ridge) height(x int) int {
@@ -103,38 +106,44 @@ var (
 func init() {
 	for _, r := range [2]*ridge{&farRidge, &nearRidge} {
 		r.img = ebiten.NewImage(r.period, r.high-r.low)
+		r.roof = ebiten.NewImage(r.period, (r.high-r.low)/2+1)
 	}
 }
 
-// paint draws the ridge in c: column x is filled from its height down.
-func (r *ridge) paint(c color.RGBA) {
+// paint draws the ridge in c with its heights divided by div, standing on
+// the bottom of its image, and the roof's ridge at half height hanging from
+// the top of its own.
+func (r *ridge) paint(c color.RGBA, div int, roof bool) {
+	r.div = div
 	r.img.Clear()
+	r.roof.Clear()
 	var ink color.Color = c // made once, not for every pixel
+	h := r.high - r.low
 	for x := range r.period {
-		for y := r.high - r.height(x); y < r.high-r.low; y++ {
+		// The image's bottom row is just above the rectangle below low.
+		for y := h - (r.height(x)/div - r.low/div); y < h; y++ {
 			r.img.Set(x, y, ink)
 		}
+		if roof {
+			for y := 0; r.low/2+y < r.height(x)/2; y++ {
+				r.roof.Set(x, y, ink)
+			}
+		}
 	}
 }
 
-// draw draws the ridge scrolled by offset, squashed to 1/div of its height,
-// standing on the bottom of the screen or hanging from the top.
-func (r *ridge) draw(screen *ebiten.Image, c color.RGBA, offset, div int, top bool) {
-	h := float64(r.high) / float64(div)
-	low := r.low / div
-	var op ebiten.DrawImageOptions
-	for x := -(offset % r.period); x < ScreenWidth; x += r.period {
-		op.GeoM.Reset()
-		if top {
-			op.GeoM.Scale(1, -1/float64(div))
-			op.GeoM.Translate(float64(x), h)
-		} else {
-			op.GeoM.Scale(1, 1/float64(div))
-			op.GeoM.Translate(float64(x), ScreenHeight-h)
-		}
-		screen.DrawImage(r.img, &op)
+// draw draws the ridge scrolled by offset, standing on the bottom of the
+// screen or hanging from the top.
+func (r *ridge) draw(screen *ebiten.Image, c color.RGBA, offset int, roof bool) {
+	img, low := r.img, r.low/r.div
+	y := ScreenHeight - low - img.Bounds().Dy()
+	if roof {
+		img, low, y = r.roof, r.low/2, r.low/2
 	}
-	if top {
+	for x := -(offset % r.period); x < ScreenWidth; x += r.period {
+		drawAt(screen, img, x, y)
+	}
+	if roof {
 		fill(screen, c, 0, 0, ScreenWidth, low)
 	} else {
 		fill(screen, c, 0, ScreenHeight-low, ScreenWidth, low)
@@ -153,8 +162,19 @@ func (g *Game) drawBackground(screen *ebiten.Image, lk *look, cam int) {
 		screen.Fill(skyColors[g.stage])
 		g.filled = screen
 	}
+	// Below the far ridge's foot the sky is always covered.
+	div := [2]int{1, 1}
+	if g.stage == 2 {
+		div = [2]int{2, 3} // a sea of clouds far below
+	}
+	foot := ScreenHeight - farRidge.low/div[0]
 	for i := range bands {
-		fill(screen, lerp(lk.sky, lk.horizon, float32(i)/(bands-1)), 0, i*ScreenHeight/bands, ScreenWidth, ScreenHeight/bands)
+		y := i * ScreenHeight / bands
+		h := min(ScreenHeight/bands, foot-y)
+		if h <= 0 {
+			break
+		}
+		fill(screen, lerp(lk.sky, lk.horizon, float32(i)/(bands-1)), 0, y, ScreenWidth, h)
 	}
 	if lk.clouds {
 		for i := range 4 {
@@ -166,21 +186,17 @@ func (g *Game) drawBackground(screen *ebiten.Image, lk *look, cam int) {
 		}
 	}
 	if ridgeStage != g.stage+1 {
-		farRidge.paint(lk.far)
-		nearRidge.paint(lk.near)
+		farRidge.paint(lk.far, div[0], g.stage == 1)
+		nearRidge.paint(lk.near, div[1], g.stage == 1)
 		ridgeStage = g.stage + 1
-	}
-	div := [2]int{1, 1}
-	if g.stage == 2 {
-		div = [2]int{2, 3} // a sea of clouds far below
 	}
 	if g.stage == 1 {
 		// Rock hangs from the cave's roof as well.
-		farRidge.draw(screen, lk.far, cam/4+70, 2, true)
-		nearRidge.draw(screen, lk.near, cam/2+30, 2, true)
+		farRidge.draw(screen, lk.far, cam/4+70, true)
+		nearRidge.draw(screen, lk.near, cam/2+30, true)
 	}
-	farRidge.draw(screen, lk.far, cam/4, div[0], false)
-	nearRidge.draw(screen, lk.near, cam/2, div[1], false)
+	farRidge.draw(screen, lk.far, cam/4, false)
+	nearRidge.draw(screen, lk.near, cam/2, false)
 }
 
 func lerp(a, b color.RGBA, t float32) color.RGBA {
