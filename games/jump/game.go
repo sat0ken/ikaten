@@ -108,8 +108,8 @@ type Game struct {
 
 	enemies [maxEnemies]enemy
 
-	// The heights of the far and the near hills over each screen column.
-	far, near [ScreenWidth]int
+	// The screen the whole of which has been filled, so that it is opaque.
+	filled *ebiten.Image
 }
 
 func NewGame() *Game {

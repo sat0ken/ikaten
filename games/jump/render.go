@@ -1,6 +1,7 @@
 package jump
 
 import (
+	"image"
 	"image/color"
 
 	ebiten "github.com/sat0ken/ikaten"
@@ -67,16 +68,86 @@ func init() {
 // cloudSpan is how far apart the clouds far behind come round again.
 const cloudSpan = 4 * 180
 
-// drawBackground draws the sky, clouds far behind, and two layers that
+// A ridge of hills behind: its height over each column comes round every
+// period columns, and is between low and high. The part above low is drawn
+// once into an image a period wide, which is drawn side by side as the view
+// scrolls; below low is one rectangle.
+type ridge struct {
+	period, low, high int
+	img               *ebiten.Image
+}
+
+func (r *ridge) height(x int) int {
+	if r.period == farPeriod {
+		return 68 + tri(x, farPeriod)*2/3 + tri(x+40, farPeriod/2)/3
+	}
+	return 36 + tri(x, nearPeriod)/2 + tri(x+22, nearPeriod/2)/4
+}
+
+const farPeriod, nearPeriod = 180, 140
+
+var (
+	farRidge  = ridge{period: farPeriod, low: 68, high: 68 + 42 + 21}
+	nearRidge = ridge{period: nearPeriod, low: 36, high: 36 + 32 + 16}
+	// ridgeStage is the stage plus one whose colors the ridges are in.
+	ridgeStage int
+)
+
+func init() {
+	for _, r := range [2]*ridge{&farRidge, &nearRidge} {
+		r.img = ebiten.NewImage(r.period, r.high-r.low)
+	}
+}
+
+// paint draws the ridge in c: column x is filled from its height down.
+func (r *ridge) paint(c color.RGBA) {
+	r.img.Clear()
+	var ink color.Color = c // made once, not for every pixel
+	for x := range r.period {
+		for y := r.high - r.height(x); y < r.high-r.low; y++ {
+			r.img.Set(x, y, ink)
+		}
+	}
+}
+
+// draw draws the ridge scrolled by offset, squashed to 1/div of its height,
+// standing on the bottom of the screen or hanging from the top.
+func (r *ridge) draw(screen *ebiten.Image, c color.RGBA, offset, div int, top bool) {
+	h := float64(r.high) / float64(div)
+	low := r.low / div
+	var op ebiten.DrawImageOptions
+	for x := -(offset % r.period); x < ScreenWidth; x += r.period {
+		op.GeoM.Reset()
+		if top {
+			op.GeoM.Scale(1, -1/float64(div))
+			op.GeoM.Translate(float64(x), h)
+		} else {
+			op.GeoM.Scale(1, 1/float64(div))
+			op.GeoM.Translate(float64(x), ScreenHeight-h)
+		}
+		screen.DrawImage(r.img, &op)
+	}
+	if top {
+		fill(screen, c, 0, 0, ScreenWidth, low)
+	} else {
+		fill(screen, c, 0, ScreenHeight-low, ScreenWidth, low)
+	}
+}
+
+// drawBackground draws the sky, clouds far behind, and two ridges that
 // scroll slower than the ground: hills in the meadow and the sky, rock in the
 // cave.
 func (g *Game) drawBackground(screen *ebiten.Image, lk *look, cam int) {
 	const bands = 12
-	// Filling the whole screen marks it opaque, after which drawing on it
-	// need not mark what it covers.
-	screen.Fill(skyColors[g.stage])
-	for i := 1; i < bands; i++ {
-		fill(screen, lerp(lk.sky, lk.horizon, float32(i)/(bands-1)), 0, i*ScreenHeight/bands, ScreenWidth, ScreenHeight/bands+1)
+	if g.filled != screen {
+		// Filling the whole screen marks it opaque, after which drawing on
+		// it need not mark what it covers. The sky covers all of it in any
+		// case, so it is done once.
+		screen.Fill(skyColors[g.stage])
+		g.filled = screen
+	}
+	for i := range bands {
+		fill(screen, lerp(lk.sky, lk.horizon, float32(i)/(bands-1)), 0, i*ScreenHeight/bands, ScreenWidth, ScreenHeight/bands)
 	}
 	if lk.clouds {
 		for i := range 4 {
@@ -87,61 +158,22 @@ func (g *Game) drawBackground(screen *ebiten.Image, lk *look, cam int) {
 			drawAt(screen, imageFarCloud, x, 22+i*29%70)
 		}
 	}
-	for x := range ScreenWidth {
-		g.far[x] = 68 + tri(x+cam/4, 180)*2/3 + tri(x+cam/4+40, 74)/3
-		g.near[x] = 36 + tri(x+cam/2, 140)/2 + tri(x+cam/2+22, 46)/4
-		if g.stage == 2 {
-			g.far[x], g.near[x] = g.far[x]/2, g.near[x]/3 // a sea of clouds far below
-		}
+	if ridgeStage != g.stage+1 {
+		farRidge.paint(lk.far)
+		nearRidge.paint(lk.near)
+		ridgeStage = g.stage + 1
+	}
+	div := [2]int{1, 1}
+	if g.stage == 2 {
+		div = [2]int{2, 3} // a sea of clouds far below
 	}
 	if g.stage == 1 {
 		// Rock hangs from the cave's roof as well.
-		skyline(screen, lk.far, &g.far, 2, true)
-		skyline(screen, lk.near, &g.near, 2, true)
+		farRidge.draw(screen, lk.far, cam/4+70, 2, true)
+		nearRidge.draw(screen, lk.near, cam/2+30, 2, true)
 	}
-	skyline(screen, lk.far, &g.far, 1, false)
-	skyline(screen, lk.near, &g.near, 1, false)
-}
-
-// skyline fills the screen's columns up from the bottom, or down from the
-// top, to the given heights divided by div. It fills a row at a time in spans
-// and the part all columns cover at once: a column at a time would set up
-// each row of each column apart, which costs far more. Going across once, a
-// span starts on the rows a column rises past and ends on the rows it drops
-// below, so only the edges are visited.
-// spanStart is where the span on each row began. It is kept here: on the
-// stack of a microcontroller it would be too large and go to the heap.
-var spanStart [ScreenHeight]int
-
-func skyline(screen *ebiten.Image, c color.RGBA, h *[ScreenWidth]int, div int, top bool) {
-	low := h[0] / div
-	for _, v := range h {
-		low = min(low, v/div)
-	}
-	start := &spanStart
-	prev := low
-	for x := 0; x <= ScreenWidth; x++ {
-		cur := low
-		if x < ScreenWidth {
-			cur = min(h[x]/div, ScreenHeight)
-		}
-		for d := prev; d < cur; d++ {
-			start[d] = x
-		}
-		for d := cur; d < prev; d++ {
-			y := ScreenHeight - 1 - d
-			if top {
-				y = d
-			}
-			fill(screen, c, start[d], y, x-start[d], 1)
-		}
-		prev = cur
-	}
-	if top {
-		fill(screen, c, 0, 0, ScreenWidth, low)
-	} else {
-		fill(screen, c, 0, ScreenHeight-low, ScreenWidth, low)
-	}
+	farRidge.draw(screen, lk.far, cam/4, div[0], false)
+	nearRidge.draw(screen, lk.near, cam/2, div[1], false)
 }
 
 func lerp(a, b color.RGBA, t float32) color.RGBA {
@@ -151,11 +183,12 @@ func lerp(a, b color.RGBA, t float32) color.RGBA {
 func mix(x, y uint8, t float32) uint8 { return uint8(float32(x) + (float32(y)-float32(x))*t) }
 
 // ground reports whether a tile is ground, for the edges and the grass.
+// Off the map counts as ground.
 func (g *Game) ground(c, r int) bool {
-	if c < 0 || c >= g.width || r < 0 {
-		return true
+	if c < 0 || c >= g.width || r < 0 || r >= rows {
+		return true // nothing to edge off the map
 	}
-	return r < rows && solid(g.level[r][c])
+	return solid(g.level[r][c])
 }
 
 // drawTiles draws the map in view: ground with grass where it meets the air
@@ -164,27 +197,32 @@ func (g *Game) ground(c, r int) bool {
 func (g *Game) drawTiles(screen *ebiten.Image, cam int) {
 	s := g.stage
 	edge := looks[s].ground[3]
+	if stripStage != s+1 {
+		paintStrips(s)
+	}
 	c0, c1 := cam/T, min((cam+ScreenWidth)/T+1, g.width)
 	for c := c0; c < c1; c++ {
 		x := c*T - cam
-		for r := range rows {
+		for r := 0; r < rows; r++ { // a run of ground moves r on
 			y := r * T
 			switch t := g.level[r][c]; t {
 			case '#':
-				if !g.ground(c, r-1) {
+				run := r
+				for run < rows && g.level[run][c] == '#' {
+					run++
+				}
+				top := !g.ground(c, r-1)
+				start := r
+				if top {
 					drawAt(screen, imageGroundTop[s], x, y)
-				} else {
-					drawAt(screen, imageGround[s][(c*7+r*3)%2], x, y)
+					start++
 				}
-				if !g.ground(c-1, r) {
-					fill(screen, edge, x, y+4, 2, T-4)
+				if start < run {
+					// The rest of the run in one piece.
+					drawAt(screen, groundCut[(c+start)%2][run-start], x, start*T)
 				}
-				if !g.ground(c+1, r) {
-					fill(screen, edge, x+T-2, y+4, 2, T-4)
-				}
-				if !g.ground(c, r+1) {
-					fill(screen, edge, x, y+T-2, T, 2)
-				}
+				g.drawEdges(screen, edge, c, r, run, top, x)
+				r = run - 1
 			case '=':
 				drawAt(screen, imageBlock[s], x, y)
 			case 'd':
@@ -214,6 +252,65 @@ func (g *Game) drawTiles(screen *ebiten.Image, cam int) {
 			}
 		}
 	}
+}
+
+// drawEdges draws the edge of a run of ground in column c, rows r to run,
+// where its sides or its bottom meet the air: a stretch at a time.
+func (g *Game) drawEdges(screen *ebiten.Image, edge color.RGBA, c, r, run int, top bool, x int) {
+	for side := -1; side <= 1; side += 2 {
+		from := -1
+		for rr := r; rr <= run; rr++ {
+			open := rr < run && !g.ground(c+side, rr)
+			if open && from < 0 {
+				from = rr
+			}
+			if !open && from >= 0 {
+				y0 := from * T
+				if from == r && top {
+					y0 += 4 // under the grass
+				}
+				ex := x
+				if side > 0 {
+					ex = x + T - 2
+				}
+				fill(screen, edge, ex, y0, 2, rr*T-y0)
+				from = -1
+			}
+		}
+	}
+	if !g.ground(c, run) {
+		fill(screen, edge, x, run*T-2, T, 2)
+	}
+}
+
+// groundStrip holds a column of ground tiles for the stage being drawn,
+// starting with each of the two kinds, and groundCut its tops n tiles long:
+// a run of ground is drawn at once rather than a tile at a time.
+var (
+	groundStrip [2]*ebiten.Image
+	groundCut   [2][rows + 1]*ebiten.Image
+	stripStage  int // the stage plus one
+)
+
+func init() {
+	for k := range groundStrip {
+		groundStrip[k] = ebiten.NewImage(T, rows*T)
+		groundStrip[k].Fill(color.RGBA{0, 0, 0, 255}) // opaque: see solidArt
+		// SubImage allocates, so the pieces are cut once here.
+		for n := 1; n <= rows; n++ {
+			groundCut[k][n] = groundStrip[k].SubImage(image.Rect(0, 0, T, n*T)).(*ebiten.Image)
+		}
+	}
+}
+
+// paintStrips draws the ground strips in the stage's colors.
+func paintStrips(stage int) {
+	for k := range groundStrip {
+		for i := range rows {
+			drawAt(groundStrip[k], imageGround[stage][(k+i)%2], 0, i*T)
+		}
+	}
+	stripStage = stage + 1
 }
 
 func abs(v int) int {
