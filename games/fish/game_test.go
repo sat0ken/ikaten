@@ -357,3 +357,29 @@ func TestKeysCast(t *testing.T) {
 		t.Fatalf("mode %d, jig at %.1f m, depth %.1f", k.mode, k.lureX, k.lureDepth)
 	}
 }
+
+// Drawing a frame allocates nothing, on the title, casting, fishing deep,
+// fighting, and the catch and the day's result.
+func TestDrawAllocs(t *testing.T) {
+	screen := ebiten.NewImage(ScreenWidth, ScreenHeight)
+	check := func(name string, g *Game) {
+		t.Helper()
+		g.Draw(screen)
+		if n := testing.AllocsPerRun(5, func() { g.ticks++; g.Draw(screen) }); n != 0 {
+			t.Errorf("%s: %v allocations", name, n)
+		}
+	}
+	check("title", NewGame())
+	g := started()
+	g.step(input{a: true, aHeld: true})
+	check("cast", g)
+	check("fishing", fishingAt(40))
+	g = hookedOn(madai)
+	check("fight", g)
+	for g.mode == modeFight {
+		g.step(skilled(g))
+	}
+	check("catch", g)
+	g.setMode(modeResult)
+	check("result", g)
+}

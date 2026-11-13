@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	ScreenWidth  = 120
-	ScreenHeight = 120
+	ScreenWidth  = 240
+	ScreenHeight = 240
 	tps          = 60
 	dt           = 1.0 / tps
 
