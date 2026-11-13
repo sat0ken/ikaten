@@ -15,6 +15,7 @@ import (
 	"github.com/sat0ken/ikaten/games/dungeon"
 	"github.com/sat0ken/ikaten/games/fish"
 	"github.com/sat0ken/ikaten/games/flappy"
+	"github.com/sat0ken/ikaten/games/jump"
 	"github.com/sat0ken/ikaten/games/kart"
 	"github.com/sat0ken/ikaten/games/shooter"
 	"github.com/sat0ken/ikaten/games/snake"
@@ -52,6 +53,7 @@ var entries = [...]entry{
 	{"AIR", "CARRIER AIR WAR", func() ebiten.Game { return air.NewGame() }},
 	{"FISHING", "CAST, HOOK AND REEL", func() ebiten.Game { return fish.NewGame() }},
 	{"GOPHER BOMB", "BOMB MAZE BATTLE", func() ebiten.Game { return bomb.NewGame() }},
+	{"GOPHER JUMP", "RUN, JUMP AND DASH", func() ebiten.Game { return jump.NewGame() }},
 }
 
 type Game struct {

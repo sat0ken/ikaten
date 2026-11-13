@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 TINYGO=${TINYGO:-tinygo}
 mkdir -p build/smoke
 for target in badge esp32s3 esp32 pico gopher-badge gopher-board; do
- for example in bounce assets snake flappy blocks dungeon shooter kart uboat tank train air fish bomb all probe benchmark; do
+ for example in bounce assets snake flappy blocks dungeon shooter kart uboat tank train air fish bomb jump all probe benchmark; do
   echo "Building $example for $target"
   tags=
   if [ "$example" = benchmark ]; then tags=ikaten_benchmark; fi
@@ -12,7 +12,7 @@ for target in badge esp32s3 esp32 pico gopher-badge gopher-board; do
    -o "build/smoke/$example-$target.elf" "./examples/$example"
  done
 done
-for example in bounce assets snake flappy blocks dungeon shooter kart uboat tank train air fish bomb all benchmark; do
+for example in bounce assets snake flappy blocks dungeon shooter kart uboat tank train air fish bomb jump all benchmark; do
  echo "Building $example for wasm"
  tags=
  if [ "$example" = benchmark ]; then tags=ikaten_benchmark; fi
