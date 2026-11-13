@@ -93,6 +93,34 @@ cp ../../compat/uboat_platform.go.txt uboat/platform_ebitengine.go
 cp ../../games/uboat/assets/*.png uboat/assets/
 cp ../../compat/uboat_main.go.txt uboatmain/main.go
 GOOS=js GOARCH=wasm go build -mod=mod -o ../uboat-ebitengine.wasm ./uboatmain
+# train is written against the Ebitengine API only and draws its images in
+# code. Its main is written here.
+rm -rf train trainmain
+mkdir -p train trainmain
+for f in ../../games/train/*.go; do
+ case "$f" in *_test.go) continue;; esac
+ sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+  -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "train/$(basename "$f")"
+done
+cat > trainmain/main.go <<'EOF'
+package main
+
+import (
+	"log"
+
+	"github.com/hajimehoshi/ebiten/v2"
+	"ikaten-compat/train"
+)
+
+func main() {
+	ebiten.SetWindowSize(480, 480)
+	ebiten.SetWindowTitle("ikaten train")
+	if err := ebiten.RunGame(train.NewGame()); err != nil {
+		log.Fatal(err)
+	}
+}
+EOF
+GOOS=js GOARCH=wasm go build -mod=mod -o ../train-ebitengine.wasm ./trainmain
 # all imports the games above from this module.
 rm -rf all allmain
 mkdir -p all allmain
@@ -101,4 +129,4 @@ sed -e 's#"github.com/sat0ken/ikaten/games/\([a-z]*\)"#"ikaten-compat/\1"#' \
  -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' ../../games/all/all.go > all/all.go
 cp ../../compat/all_main.go.txt allmain/main.go
 GOOS=js GOARCH=wasm go build -mod=mod -o ../all-ebitengine.wasm ./allmain
-echo "Ebitengine compatibility build passed (bounce: shared game.go; snake, flappy, blocks, dungeon, shooter, kart, uboat, tank and all: import paths rewritten)"
+echo "Ebitengine compatibility build passed (bounce: shared game.go; snake, flappy, blocks, dungeon, shooter, kart, uboat, tank, train and all: import paths rewritten)"
