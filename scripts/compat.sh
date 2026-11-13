@@ -148,6 +148,33 @@ func main() {
 }
 EOF
 GOOS=js GOARCH=wasm go build -mod=mod -o ../air-ebitengine.wasm ./airmain
+# fish, like train and air, draws its images in code. Its main is written here.
+rm -rf fish fishmain
+mkdir -p fish fishmain
+for f in ../../games/fish/*.go; do
+ case "$f" in *_test.go) continue;; esac
+ sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+  -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "fish/$(basename "$f")"
+done
+cat > fishmain/main.go <<'EOF'
+package main
+
+import (
+	"log"
+
+	"github.com/hajimehoshi/ebiten/v2"
+	"ikaten-compat/fish"
+)
+
+func main() {
+	ebiten.SetWindowSize(480, 480)
+	ebiten.SetWindowTitle("ikaten fish")
+	if err := ebiten.RunGame(fish.NewGame()); err != nil {
+		log.Fatal(err)
+	}
+}
+EOF
+GOOS=js GOARCH=wasm go build -mod=mod -o ../fish-ebitengine.wasm ./fishmain
 # all imports the games above from this module.
 rm -rf all allmain
 mkdir -p all allmain
@@ -156,4 +183,4 @@ sed -e 's#"github.com/sat0ken/ikaten/games/\([a-z]*\)"#"ikaten-compat/\1"#' \
  -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' ../../games/all/all.go > all/all.go
 cp ../../compat/all_main.go.txt allmain/main.go
 GOOS=js GOARCH=wasm go build -mod=mod -o ../all-ebitengine.wasm ./allmain
-echo "Ebitengine compatibility build passed (bounce: shared game.go; snake, flappy, blocks, dungeon, shooter, kart, uboat, tank, train, air and all: import paths rewritten)"
+echo "Ebitengine compatibility build passed (bounce: shared game.go; snake, flappy, blocks, dungeon, shooter, kart, uboat, tank, train, air, fish and all: import paths rewritten)"

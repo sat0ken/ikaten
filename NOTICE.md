@@ -25,7 +25,7 @@ ikaten の大部分は [MIT License](LICENSE) です。ただし、次に挙げ�
 | `games/blocks/assets/blocks.png`、`background.png` と各 `.ika` | Ebitengine `examples/resources/images/blocks/`。Copyright 2014 Hajime Hoshi | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | PNGは無加工。IKA1形式に変換 |
 | `games/blocks/assets/gamebg.png`、`gamebg.ika` | Ebitengine `examples/resources/images/gophers.jpg`。Photograph by Chris Nokleberg (https://go.dev/blog/2years) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | 画面の大きさに拡大縮小し、明るい灰色に変換し、半透明のウィンドウを焼き込み、IKA1形式に変換 |
 
-これ以外の画像(`games/assets`、`games/kart/assets/track.png`、`games/uboat/assets`、`games/tank/assets`、dungeon・shooter・kart・uboat・tank・train・airのスプライトなど)は ikaten 用に新しく作ったもので、MIT License です。
+これ以外の画像(`games/assets`、`games/kart/assets/track.png`、`games/uboat/assets`、`games/tank/assets`、dungeon・shooter・kart・uboat・tank・train・air・fishのスプライトなど)は ikaten 用に新しく作ったもので、MIT License です。
 
 ## 依存ライブラリ
 
