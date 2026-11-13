@@ -16,6 +16,7 @@ import (
 	"github.com/sat0ken/ikaten/games/shooter"
 	"github.com/sat0ken/ikaten/games/snake"
 	"github.com/sat0ken/ikaten/games/tank"
+	"github.com/sat0ken/ikaten/games/train"
 	"github.com/sat0ken/ikaten/games/uboat"
 	"github.com/sat0ken/ikaten/inpututil"
 )
@@ -24,8 +25,8 @@ const (
 	ScreenWidth  = 120
 	ScreenHeight = 120
 	holdTicks    = 60 // A and B held this long return to the menu
-	rowHeight    = 9
-	listTop      = 15
+	rowHeight    = 8
+	listTop      = 14
 )
 
 type entry struct {
@@ -43,6 +44,7 @@ var entries = [...]entry{
 	{"KART", "KART RACING", func() ebiten.Game { return kart.NewGame() }},
 	{"U-BOAT", "SUBMARINE ATTACK", func() ebiten.Game { return uboat.NewGame() }},
 	{"TANK", "TANK BATTLE", func() ebiten.Game { return tank.NewGame() }},
+	{"TRAIN", "TRAIN DRIVING", func() ebiten.Game { return train.NewGame() }},
 }
 
 type Game struct {

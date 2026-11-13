@@ -21,6 +21,7 @@ make wasm GAME=shooter      # オリジナルの縦スクロールシューテ�
 make wasm GAME=kart         # オリジナルのカートレース(地面を回転・拡大して描く方式)
 make wasm GAME=uboat        # オリジナルの潜水艦ゲーム(潜望鏡で船団を狙う)
 make wasm GAME=tank         # オリジナルの戦車戦(砲手の照準器で狙い、装甲の向きと弾の落下を考える)
+make wasm GAME=train        # オリジナルの電車の運転(運転台から見た路線で、停止位置と時刻表を守る)
 make wasm GAME=all          # 全ゲームを選んで遊べるランチャー(A+Bを1秒でメニューへ)
 ```
 
@@ -112,8 +113,8 @@ func loadSprite() (*ikaten.Image, error) {
 ```sh
 make check                   # 単体テスト・vet・計測タグ付きテスト
 go test -race ./...
-make smoketest               # 13サンプル×6ボード + 12サンプル×WASM = 90ビルド
-make compat                  # bounce、snake、flappy、blocks、dungeon、shooter、kart、uboat、tank、allをEbitengine v2.10.5でWASMビルド
+make smoketest               # 14サンプル×6ボード + 13サンプル×WASM = 97ビルド
+make compat                  # bounce、snake、flappy、blocks、dungeon、shooter、kart、uboat、tank、train、allをEbitengine v2.10.5でWASMビルド
 make allocs                  # TinyGoの確保箇所を表示
 make probe                   # SPI周波数別の測定用ファームウェア
 make benchmark               # 30分実行用の計測ファームウェア
@@ -125,4 +126,4 @@ make benchmark               # 30分実行用の計測ファームウェア
 
 ikaten は [MIT License](LICENSE) です。ただし、Ebitengine のサンプルを移植した `games/snake`、`games/flappy`、`games/blocks` と関連する互換ビルド・差分のファイルは [Apache License 2.0](LICENSE-APACHE)、flappy と blocks の画像の一部は CC BY 4.0 または CC0 です。対象のファイル、著作権表示、帰属表示は [NOTICE.md](NOTICE.md) にまとめています。
 
-ライブラリ本体、dungeon、shooter、kart、uboat、tank、ランチャー(all)は ikaten 用に新しく書いたもので、koebiten と Ebitengine の実装コードはコピーしていません。API の名前と形は Ebitengine に合わせています。依存ライブラリにはそれぞれのライセンスが適用されます。
+ライブラリ本体、dungeon、shooter、kart、uboat、tank、train、ランチャー(all)は ikaten 用に新しく書いたもので、koebiten と Ebitengine の実装コードはコピーしていません。API の名前と形は Ebitengine に合わせています。依存ライブラリにはそれぞれのライセンスが適用されます。
