@@ -76,6 +76,8 @@ func (g *Game) Update() error {
 		}
 		if g.held >= holdTicks {
 			g.game, g.held = nil, 0
+			// A game may have kept its screen between frames; the menu clears it.
+			ebiten.SetScreenClearedEveryFrame(true)
 			return nil
 		}
 		g.fresh = false
@@ -89,6 +91,7 @@ func (g *Game) Update() error {
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyZ) || inpututil.IsKeyJustPressed(ebiten.KeySpace) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
 		// The game starts on the next tick, so it does not see this press as new.
+		ebiten.SetScreenClearedEveryFrame(true)
 		g.game, g.fresh = entries[g.cursor].start(), true
 	}
 	return nil

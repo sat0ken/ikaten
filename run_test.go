@@ -130,3 +130,63 @@ func TestResizeScreenReusesMemory(t *testing.T) {
 		t.Fatal("the reused screen does not draw")
 	}
 }
+
+// keepGame draws a dot on the first frame only and records, each later
+// frame, whether the dot is still there; its Layout shrinks from frame 4 on,
+// which takes effect at the fifth Draw.
+type keepGame struct {
+	frame int
+	seen  []bool
+}
+
+func (g *keepGame) Update() error {
+	if g.frame >= 6 {
+		return Termination
+	}
+	return nil
+}
+
+func (g *keepGame) Layout(w, h int) (int, int) {
+	if g.frame >= 4 {
+		return 5, 5
+	}
+	return 10, 10
+}
+
+func (g *keepGame) Draw(screen *Image) {
+	g.frame++
+	if g.frame == 1 {
+		screen.Set(1, 1, color.RGBA{255, 0, 0, 255})
+		return
+	}
+	g.seen = append(g.seen, screen.RGBAAt(1, 1).A != 0)
+}
+
+func TestScreenClearedEveryFrame(t *testing.T) {
+	SetHardware(&fakeHardware{})
+	defer SetScreenClearedEveryFrame(true)
+	for _, cleared := range []bool{true, false} {
+		SetScreenClearedEveryFrame(cleared)
+		if IsScreenClearedEveryFrame() != cleared {
+			t.Fatal("the setting did not stick")
+		}
+		g := &keepGame{}
+		if err := RunGame(g); err != nil {
+			t.Fatal(err)
+		}
+		// Frames 2 to 4 keep the dot unless cleared; frame 5 has a new size,
+		// which clears the screen even when it is kept, and frame 6 stays so.
+		want := []bool{false, false, false, false, false}
+		if !cleared {
+			want = []bool{true, true, true, false, false}
+		}
+		if len(g.seen) != len(want) {
+			t.Fatalf("cleared %v: %d frames seen", cleared, len(g.seen))
+		}
+		for i := range want {
+			if g.seen[i] != want[i] {
+				t.Fatalf("cleared %v: frames saw the dot %v, want %v", cleared, g.seen, want)
+			}
+		}
+	}
+}

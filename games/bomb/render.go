@@ -29,79 +29,181 @@ var (
 	textGray   = color.RGBA{150, 160, 180, 255}
 )
 
+// Draw redraws only the cells that changed since the last frame, and the
+// cells the gophers and bombs cover now or covered then, and then draws the
+// gophers and bombs on top: the screen is not cleared between frames (see
+// NewGame), and most of the arena stays the same from one frame to the next.
+// It draws everything when it cannot rely on the last frame: on a new screen,
+// one cleared every frame, or when a box over the arena comes or goes.
 func (g *Game) Draw(screen *ebiten.Image) {
-	g.drawArena(screen)
-	g.drawFire(screen)
+	key := g.overlayKey()
+	full := g.paintedOn != screen || ebiten.IsScreenClearedEveryFrame() || key != g.paintedKey
+	var covered [rows][cols]bool
+	g.markSprites(&covered)
+	if full {
+		fill(screen, barColor, 0, arenaY, ScreenWidth, rows*tile)
+	}
+	for r := range rows {
+		for c := range cols {
+			sig := g.cellSig(c, r)
+			if full || sig != g.painted[r][c] || covered[r][c] || g.covered[r][c] {
+				g.drawCell(screen, c, r)
+				g.painted[r][c] = sig
+			}
+		}
+	}
+	g.covered, g.paintedOn, g.paintedKey = covered, screen, key
 	g.drawBombs(screen)
 	g.drawGophers(screen)
-	g.drawBars(screen)
+	// The bars change at most once a second, when the clock ticks.
+	if bars := g.barsKey(); full || bars != g.paintedBars {
+		g.drawBars(screen)
+		g.paintedBars = bars
+	}
 	g.drawOverlay(screen)
+}
+
+// barsKey sums up what the bars show.
+func (g *Game) barsKey() uint64 {
+	k := uint64(max(g.clock, 0) / tps)
+	if g.clock <= hurryTime && g.mode == modePlay {
+		k |= 1 << 12
+	}
+	for i := range g.gophers {
+		k |= uint64(g.gophers[i].wins&7) << (16 + 3*i)
+	}
+	p := &g.gophers[0]
+	k |= uint64(p.fire&15)<<28 | uint64(p.count&15)<<32 | uint64(p.speed&15)<<36 | uint64(g.level&0xffff)<<40
+	return k
+}
+
+// overlayKey changes when a box or a message over the arena appears or goes.
+func (g *Game) overlayKey() int {
+	key := int(g.mode) * 2
+	if g.hurryShown() {
+		key++
+	}
+	return key
+}
+
+func (g *Game) hurryShown() bool {
+	return g.mode == modePlay && g.clock <= hurryTime && g.clock > hurryTime-2*tps && g.ticks/10%2 == 0
+}
+
+// markSprites marks the cells the gophers and the bombs cover.
+func (g *Game) markSprites(covered *[rows][cols]bool) {
+	for i := range g.gophers {
+		if p := &g.gophers[i]; p.alive {
+			x := arenaX + p.x*tile/unit - tile/2
+			y := arenaY + p.y*tile/unit + tile/2 - 11
+			markBox(covered, x, y, 9, 11)
+		}
+	}
+	for i := range g.bombs {
+		if b := &g.bombs[i]; b.active {
+			x := arenaX + b.x*tile/unit - tile/2
+			y := arenaY + b.y*tile/unit - tile/2
+			markBox(covered, x-1, y-1, tile+2, tile+2) // with room to swell
+		}
+	}
+}
+
+// markBox marks the cells a box of pixels touches.
+func markBox(covered *[rows][cols]bool, x, y, w, h int) {
+	c0, r0 := max((x-arenaX)/tile, 0), max((y-arenaY)/tile, 0)
+	c1, r1 := min((x+w-1-arenaX)/tile, cols-1), min((y+h-1-arenaY)/tile, rows-1)
+	for r := r0; r <= r1; r++ {
+		for c := c0; c <= c1; c++ {
+			covered[r][c] = true
+		}
+	}
+}
+
+// fireShape returns how the fire in a cell is drawn: along the row, along
+// the column, and the bands' width; or width 0 for no fire.
+func (g *Game) fireShape(c, r int) (across, along bool, w int) {
+	if g.flames[r][c] == 0 {
+		return false, false, 0
+	}
+	across = c > 0 && g.flames[r][c-1] > 0 || c < cols-1 && g.flames[r][c+1] > 0
+	along = r > 0 && g.flames[r-1][c] > 0 || r < rows-1 && g.flames[r+1][c] > 0
+	if !across && !along {
+		across, along = true, true
+	}
+	w = 7 - g.ticks/3%2
+	if g.flames[r][c] < 8 {
+		w = 3 // dying down
+	}
+	return across, along, w
+}
+
+// cellSig sums up everything a cell's drawing depends on.
+func (g *Game) cellSig(c, r int) uint32 {
+	s := uint32(g.grid[r][c])
+	if r > 0 && g.grid[r-1][c] != floor {
+		s |= 1 << 2
+	}
+	if g.crumble[r][c] > 0 {
+		s |= 1 << 3
+	}
+	if g.shown[r][c] {
+		s |= uint32(g.items[r][c]) << 4
+	}
+	if across, along, w := g.fireShape(c, r); w > 0 {
+		s |= uint32(w) << 8
+		if across {
+			s |= 1 << 12
+		}
+		if along {
+			s |= 1 << 13
+		}
+	}
+	return s
 }
 
 func cellX(c int) int { return arenaX + c*tile }
 func cellY(r int) int { return arenaY + r*tile }
 
-func (g *Game) drawArena(screen *ebiten.Image) {
-	fill(screen, barColor, 0, arenaY, ScreenWidth, rows*tile)
-	for r := range rows {
-		for c := range cols {
-			x, y := cellX(c), cellY(r)
-			switch g.grid[r][c] {
-			case wall:
-				drawAt(screen, imageWall, x, y)
-				continue
-			case block:
-				drawAt(screen, imageBlock, x, y)
-				continue
-			}
-			grass := grassA
-			if (r+c)%2 == 1 {
-				grass = grassB
-			}
-			fill(screen, grass, x, y, tile, tile)
-			// The shade of the wall or block above.
-			if r > 0 && g.grid[r-1][c] != floor {
-				fill(screen, shadow, x, y, tile, 2)
-			}
-			if g.crumble[r][c] > 0 {
-				drawAt(screen, imageCrumble, x, y)
-			} else if g.shown[r][c] {
-				drawAt(screen, imageItem[g.items[r][c]], x, y)
-			}
-		}
+// drawCell draws one cell of the arena: the wall, the block or the grass
+// with its shade, the item, and the fire.
+func (g *Game) drawCell(screen *ebiten.Image, c, r int) {
+	x, y := cellX(c), cellY(r)
+	switch g.grid[r][c] {
+	case wall:
+		drawAt(screen, imageWall, x, y)
+		return
+	case block:
+		drawAt(screen, imageBlock, x, y)
+		return
 	}
-}
-
-// drawFire draws each burning cell as bands along the lines the fire runs.
-func (g *Game) drawFire(screen *ebiten.Image) {
-	flick := g.ticks / 3 % 2
-	for r := range rows {
-		for c := range cols {
-			if g.flames[r][c] == 0 {
-				continue
-			}
-			x, y := cellX(c), cellY(r)
-			across := c > 0 && g.flames[r][c-1] > 0 || c < cols-1 && g.flames[r][c+1] > 0
-			along := r > 0 && g.flames[r-1][c] > 0 || r < rows-1 && g.flames[r+1][c] > 0
-			if !across && !along {
-				across, along = true, true
-			}
-			w := 7 - flick
-			if g.flames[r][c] < 8 {
-				w = 3 // dying down
-			}
-			if across {
-				fill(screen, fireOuter, x, y+(tile-w)/2, tile, w)
-				fill(screen, fireInner, x, y+(tile-w)/2+1, tile, w-2)
-			}
-			if along {
-				fill(screen, fireOuter, x+(tile-w)/2, y, w, tile)
-				fill(screen, fireInner, x+(tile-w)/2+1, y, w-2, tile)
-			}
-			if across && along {
-				fill(screen, fireCore, x+3, y+3, 3, 3)
-			}
-		}
+	grass := grassA
+	if (r+c)%2 == 1 {
+		grass = grassB
+	}
+	fill(screen, grass, x, y, tile, tile)
+	// The shade of the wall or block above.
+	if r > 0 && g.grid[r-1][c] != floor {
+		fill(screen, shadow, x, y, tile, 2)
+	}
+	if g.crumble[r][c] > 0 {
+		drawAt(screen, imageCrumble, x, y)
+	} else if g.shown[r][c] {
+		drawAt(screen, imageItem[g.items[r][c]], x, y)
+	}
+	across, along, w := g.fireShape(c, r)
+	if w == 0 {
+		return
+	}
+	if across {
+		fill(screen, fireOuter, x, y+(tile-w)/2, tile, w)
+		fill(screen, fireInner, x, y+(tile-w)/2+1, tile, w-2)
+	}
+	if along {
+		fill(screen, fireOuter, x+(tile-w)/2, y, w, tile)
+		fill(screen, fireInner, x+(tile-w)/2+1, y, w-2, tile)
+	}
+	if across && along {
+		fill(screen, fireCore, x+3, y+3, 3, 3)
 	}
 }
 
@@ -221,7 +323,7 @@ func (g *Game) drawOverlay(screen *ebiten.Image) {
 			buf.reset().str("READY").center(screen, 60, textYellow)
 		}
 	case modePlay:
-		if g.clock <= hurryTime && g.clock > hurryTime-2*tps && g.ticks/10%2 == 0 {
+		if g.hurryShown() {
 			buf.reset().str("HURRY!").center2(screen, 50, textRed)
 		}
 	case modeRoundOver:

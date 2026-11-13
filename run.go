@@ -11,6 +11,17 @@ import (
 var targetTPS = 60
 var actualTPS, actualFPS float64
 var running bool
+var screenCleared = true
+
+// SetScreenClearedEveryFrame sets whether the screen is cleared before each
+// Draw, as in Ebitengine. It is true at first. A game that leaves it false
+// may redraw only what changed: the screen keeps the last frame, except
+// that it is cleared once when Layout changes its size.
+func SetScreenClearedEveryFrame(cleared bool) { screenCleared = cleared }
+
+// IsScreenClearedEveryFrame reports whether the screen is cleared before each
+// Draw.
+func IsScreenClearedEveryFrame() bool { return screenCleared }
 
 func SetTPS(tps int) {
 	if tps <= 0 || tps > 1000 {
@@ -113,11 +124,15 @@ func RunGame(game Game) error {
 		if err != nil {
 			return err
 		}
-		if screen == nil || screen.view.Bounds.Dx() != w || screen.view.Bounds.Dy() != h {
+		resized := screen == nil || screen.view.Bounds.Dx() != w || screen.view.Bounds.Dy() != h
+		if resized {
 			screen = resizeScreen(screen, w, h)
 		}
 		begin = benchmarkStart()
-		screen.Clear()
+		// A reused screen still holds another size's pixels.
+		if screenCleared || resized {
+			screen.Clear()
+		}
 		game.Draw(screen)
 		benchmarkDraw(begin)
 		begin = benchmarkStart()
