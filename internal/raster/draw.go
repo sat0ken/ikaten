@@ -35,6 +35,12 @@ func draw(dst, src View, o Options, forceGeneral bool) {
 		integer(dst, src, o)
 		return
 	}
+	if !forceGeneral && o.A == -1 && o.B == 0 && o.C == 0 && o.D >= 1 && o.D <= 32767 && o.D == float32(int(o.D)) &&
+		o.TX >= -1e7 && o.TX <= 1e7 && o.TY >= -1e7 && o.TY <= 1e7 && o.TX == float32(int(o.TX)) && o.TY == float32(int(o.TY)) &&
+		o.R == 256 && o.G == 256 && o.Blue == 256 && o.Alpha == 256 && o.Blend != Lighter {
+		mirrored(dst, src, o)
+		return
+	}
 	if !forceGeneral && o.B == 0 && o.C == 0 && scaled(dst, src, o) {
 		return
 	}
@@ -136,6 +142,12 @@ func scaled(dst, src View, o Options) bool {
 	// rows that sample one source row (several, when magnified) are filled
 	// together: each texel is shaded once and written down the run of rows.
 	direct := o.Alpha == 256 && o.Blend != Lighter
+	db, sb := dst.Buffer, src.Buffer
+	pixels, mask, spix, smask, sdata := db.Pixels, db.Mask, sb.Pixels, sb.Mask, sb.Data
+	sopaque := sb.Opaque || smask == nil
+	stride := dst.Stride
+	// An opaque destination's mask bits are already set.
+	marking := !db.Opaque && mask != nil
 	for y := y0; y < y1; {
 		py := int(sy >> 32)
 		end := y + 1
@@ -155,27 +167,27 @@ func scaled(dst, src View, o Options) bool {
 					continue
 				}
 				if !direct {
-					shade(dst.Buffer, di+i, src.Buffer, si+px, &o)
+					shade(db, di+i, sb, si+px, &o)
 					continue
 				}
-				visible := src.Buffer.Visible(si + px)
-				if !visible && o.Blend != Copy {
-					continue
-				}
-				v := uint16(0)
-				if visible {
-					v = tint(src.Buffer.Pixel(si+px), &o)
-				}
-				if !visible {
-					for d := di + i; d <= last+i; d += dst.Stride {
-						dst.Buffer.Set(d, 0, false)
+				p := si + px
+				if !sopaque && smask[p>>3]&(1<<uint(p&7)) == 0 {
+					if o.Blend == Copy {
+						for d := di + i; d <= last+i; d += stride {
+							db.Set(d, 0, false)
+						}
+						marking = mask != nil
 					}
 					continue
 				}
-				// An opaque destination's mask bits are already set.
-				pixels, mask := dst.Buffer.Pixels, dst.Buffer.Mask
-				marking := !dst.Buffer.Opaque && mask != nil
-				for d := di + i; d <= last+i; d += dst.Stride {
+				var v uint16
+				if sdata != nil {
+					v = uint16(sdata[2*p]) | uint16(sdata[2*p+1])<<8
+				} else {
+					v = spix[p]
+				}
+				v = tint(v, &o)
+				for d := di + i; d <= last+i; d += stride {
 					pixels[d] = v
 					if marking {
 						mask[d>>3] |= 1 << uint(d&7)
@@ -254,7 +266,7 @@ func affine(dst, src View, o Options) bool {
 	pixels, mask := dst.Buffer.Pixels, dst.Buffer.Mask
 	// An opaque destination's mask bits are already set.
 	marking := !dst.Buffer.Opaque && mask != nil
-	data := src.Buffer.Data
+	data, spix, smask := src.Buffer.Data, src.Buffer.Pixels, src.Buffer.Mask
 	for y := y0; y < y1; y, rowX, rowY = y+1, rowX+stepX, rowY+stepY {
 		di := dst.Index(x0, y)
 		sx, sy := rowX, rowY
@@ -268,9 +280,10 @@ func affine(dst, src View, o Options) bool {
 				shade(dst.Buffer, di+i, src.Buffer, p, &o)
 				continue
 			}
-			if !opaque && !src.Buffer.Visible(p) {
+			if !opaque && smask[p>>3]&(1<<uint(p&7)) == 0 {
 				if o.Blend == Copy {
 					dst.Buffer.Set(di+i, 0, false)
+					marking = mask != nil
 				}
 				continue
 			}
@@ -278,7 +291,7 @@ func affine(dst, src View, o Options) bool {
 			if data != nil {
 				pixels[q] = uint16(data[2*p]) | uint16(data[2*p+1])<<8
 			} else {
-				pixels[q] = src.Buffer.Pixels[p]
+				pixels[q] = spix[p]
 			}
 			if marking {
 				mask[q>>3] |= 1 << uint(q&7)
@@ -314,37 +327,61 @@ func integer(dst, src View, o Options) {
 	plain := o.R == 256 && o.G == 256 && o.Blue == 256 && o.Alpha == 256 && o.Blend != Lighter
 	opaque := src.Buffer.Opaque || src.Buffer.Mask == nil
 	firstColumn, firstRepeat := (x0-tx)/sx, (x0-tx)%sx
+	db, sb := dst.Buffer, src.Buffer
+	dpix, spix, sdata, smask := db.Pixels, sb.Pixels, sb.Data, sb.Mask
 	for y := y0; y < y1; y++ {
 		si := src.Offset + (y-ty)/sy*src.Stride
 		di := dst.Index(x0, y)
 		switch {
 		case plain && sx == 1 && opaque:
-			opaqueRow(dst.Buffer, di, src.Buffer, si+firstColumn, n)
+			opaqueRow(db, di, sb, si+firstColumn, n)
 		case plain && sx == 1:
-			maskedRow(dst.Buffer, di, src.Buffer, si+firstColumn, n, o.Blend)
+			maskedRow(db, di, sb, si+firstColumn, n, o.Blend)
 		case plain && opaque:
 			// Each source pixel fills a run, such as a 1x1 image scaled to a rectangle.
-			out := dst.Buffer.Pixels[di : di+n]
-			column, run := firstColumn, sx-firstRepeat
-			for i := 0; i < n; column, run = column+1, sx {
-				v := src.Buffer.Pixel(si + column)
-				for end := min(n, i+run); i < end; i++ {
-					out[i] = v
+			out := dpix[di : di+n]
+			if src.Bounds.Dx() == 1 {
+				fillPixels(out, sb.Pixel(si))
+			} else {
+				column, run := firstColumn, sx-firstRepeat
+				for i := 0; i < n; column, run = column+1, sx {
+					v := sb.Pixel(si + column)
+					fillPixels(out[i:min(n, i+run)], v)
+					i += run
 				}
 			}
-			dst.Buffer.SetMaskRange(di, n, true)
+			// An opaque destination's mask bits are already set.
+			if !db.Opaque {
+				db.SetMaskRange(di, n, true)
+			}
+		case plain:
+			column, repeat := firstColumn, firstRepeat
+			dmask := db.Mask
+			marking := !db.Opaque && dmask != nil
+			for i := 0; i < n; i++ {
+				if p := si + column; smask[p>>3]&(1<<uint(p&7)) != 0 {
+					q := di + i
+					if sdata != nil {
+						dpix[q] = uint16(sdata[2*p]) | uint16(sdata[2*p+1])<<8
+					} else {
+						dpix[q] = spix[p]
+					}
+					if marking {
+						dmask[q>>3] |= 1 << uint(q&7)
+					}
+				} else if o.Blend == Copy {
+					db.Set(di+i, 0, false)
+					marking = dmask != nil
+				}
+				if repeat++; repeat == sx {
+					repeat = 0
+					column++
+				}
+			}
 		default:
 			column, repeat := firstColumn, firstRepeat
 			for i := 0; i < n; i++ {
-				if plain {
-					if p := si + column; src.Buffer.Visible(p) {
-						dst.Buffer.Set(di+i, src.Buffer.Pixel(p), true)
-					} else if o.Blend == Copy {
-						dst.Buffer.Set(di+i, 0, false)
-					}
-				} else {
-					shade(dst.Buffer, di+i, src.Buffer, si+column, &o)
-				}
+				shade(db, di+i, sb, si+column, &o)
 				if repeat++; repeat == sx {
 					repeat = 0
 					column++
@@ -354,40 +391,126 @@ func integer(dst, src View, o Options) {
 	}
 }
 
+// mirrored draws an image flipped left to right, at a whole pixel and
+// scaled up a whole number of times down, without a color scale: a sprite
+// facing the other way. Destination x samples source column tx-x-1.
+func mirrored(dst, src View, o Options) {
+	sy, tx, ty := int(o.D), int(o.TX), int(o.TY)
+	x0, x1 := max(dst.Bounds.Min.X, tx-src.Bounds.Dx()), min(dst.Bounds.Max.X, tx)
+	y0, y1 := max(dst.Bounds.Min.Y, ty), min(dst.Bounds.Max.Y, ty+src.Bounds.Dy()*sy)
+	if x0 >= x1 || y0 >= y1 {
+		return
+	}
+	db, sb := dst.Buffer, src.Buffer
+	dpix, dmask, spix, smask, sdata := db.Pixels, db.Mask, sb.Pixels, sb.Mask, sb.Data
+	opaque := sb.Opaque || smask == nil
+	// An opaque destination's mask bits are already set.
+	marking := !db.Opaque && dmask != nil
+	n := x1 - x0
+	for y := y0; y < y1; y++ {
+		// The source pixel for the row's first destination pixel; the
+		// following ones go leftward from it.
+		p0 := src.Offset + (y-ty)/sy*src.Stride + tx - x0 - 1
+		di := dst.Index(x0, y)
+		out := dpix[di : di+n]
+		for i := range out {
+			p := p0 - i
+			if !opaque && smask[p>>3]&(1<<uint(p&7)) == 0 {
+				if o.Blend == Copy {
+					db.Set(di+i, 0, false)
+					marking = dmask != nil
+				}
+				continue
+			}
+			if sdata != nil {
+				out[i] = uint16(sdata[2*p]) | uint16(sdata[2*p+1])<<8
+			} else {
+				out[i] = spix[p]
+			}
+			if marking {
+				q := di + i
+				dmask[q>>3] |= 1 << uint(q&7)
+			}
+		}
+	}
+}
+
 func opaqueRow(dst *Buffer, di int, src *Buffer, si, n int) {
 	out := dst.Pixels[di : di+n]
-	if src.Data == nil {
-		copy(out, src.Pixels[si:si+n])
+	if data := src.Data; data == nil {
+		copyPixels(out, src.Pixels[si:si+n])
 	} else {
-		data := src.Data[2*si : 2*(si+n)]
+		data = data[2*si : 2*(si+n)]
 		for i := range out {
 			out[i] = uint16(data[2*i]) | uint16(data[2*i+1])<<8
 		}
 	}
-	dst.SetMaskRange(di, n, true)
+	// An opaque destination's mask bits are already set.
+	if !dst.Opaque {
+		dst.SetMaskRange(di, n, true)
+	}
 }
 
 func maskedRow(dst *Buffer, di int, src *Buffer, si, n int, blend Blend) {
 	out := dst.Pixels[di : di+n]
-	mask := src.Mask
+	mask, pix, data, dmask := src.Mask, src.Pixels, src.Data, dst.Mask
 	// An opaque destination's mask bits are already set.
-	marking := !dst.Opaque && dst.Mask != nil
+	marking := !dst.Opaque && dmask != nil
+	if data == nil && blend != Copy {
+		// Only shown pixels are written, so the mask is read a byte, eight
+		// pixels, at a time: a clear byte is skipped and a full one copied.
+		pix = pix[si : si+n]
+		for i := 0; i < n; {
+			p := si + i
+			k := min(8-p&7, n-i) // the pixels this byte of the mask covers
+			full := byte(1<<uint(k) - 1)
+			m := mask[p>>3] >> uint(p&7) & full
+			if m == 0 {
+				i += k
+				continue
+			}
+			o, s := out[i:i+k], pix[i:i+k]
+			if m == full {
+				for j := range o {
+					o[j] = s[j]
+				}
+			} else {
+				for j := 0; m != 0; j, m = j+1, m>>1 {
+					if m&1 != 0 {
+						o[j] = s[j]
+					}
+				}
+				m = mask[p>>3] >> uint(p&7) & full
+			}
+			if marking {
+				for j := 0; m != 0; j, m = j+1, m>>1 {
+					if m&1 != 0 {
+						q := di + i + j
+						dmask[q>>3] |= 1 << uint(q&7)
+					}
+				}
+			}
+			i += k
+		}
+		return
+	}
 	for i := range out {
 		p := si + i
 		if mask[p>>3]&(1<<uint(p&7)) == 0 {
 			if blend == Copy {
 				dst.Set(di+i, 0, false)
+				marking = dmask != nil
 			}
 			continue
 		}
-		if src.Data == nil {
-			out[i] = src.Pixels[p]
+		if data == nil {
+			out[i] = pix[p]
 		} else {
-			out[i] = uint16(src.Data[2*p]) | uint16(src.Data[2*p+1])<<8
+			out[i] = uint16(data[2*p]) | uint16(data[2*p+1])<<8
 		}
 		if marking {
 			q := di + i
-			dst.Mask[q>>3] |= 1 << uint(q&7)
+			dmask[q>>3] |= 1 << uint(q&7)
 		}
 	}
 }

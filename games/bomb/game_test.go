@@ -317,3 +317,74 @@ func TestKeys(t *testing.T) {
 		t.Fatalf("x %d, bombs %d", k.gophers[0].x, k.countBombs(0))
 	}
 }
+
+// Redrawing only what changed, on the last frame's screen, gives the same
+// pixels as drawing everything anew, frame after frame: through bombs, fire,
+// falling gophers, the closing walls, the boxes between rounds and a match's
+// end.
+func TestDrawOnlyChanges(t *testing.T) {
+	g := NewGame()
+	if ebiten.IsScreenClearedEveryFrame() {
+		t.Fatal("the screen is still cleared every frame")
+	}
+	g.newMatch()
+	w, h := ScreenWidth, ScreenHeight
+	kept := ebiten.NewImage(w, h)
+	pixels, want := make([]byte, 4*w*h), make([]byte, 4*w*h)
+	checked := 0
+	for tick := range 12000 {
+		switch g.mode {
+		case modeMatchOver:
+			g.newMatch()
+		case modePlay:
+			if tick%600 == 0 {
+				g.clock = min(g.clock, hurryTime+30) // reach the closing walls soon
+			}
+		}
+		g.ticks++
+		g.step(g.cpu(0))
+		g.Draw(kept)
+		if tick%7 != 0 {
+			continue
+		}
+		fresh := *g
+		fresh.paintedOn = nil
+		all := ebiten.NewImage(w, h)
+		fresh.Draw(all)
+		kept.ReadPixels(pixels)
+		all.ReadPixels(want)
+		for i := range pixels {
+			if pixels[i] != want[i] {
+				p := i / 4
+				t.Fatalf("tick %d, mode %d: pixel %d,%d differs", tick, g.mode, p%w, p/w)
+			}
+		}
+		checked++
+	}
+	t.Logf("%d frames compared", checked)
+}
+
+// Drawing a frame allocates nothing, all of it or only what changed.
+func TestDrawAllocs(t *testing.T) {
+	screen := ebiten.NewImage(ScreenWidth, ScreenHeight)
+	g := NewGame()
+	g.newMatch()
+	for range 400 {
+		g.ticks++
+		g.step(g.cpu(0))
+	}
+	for _, full := range []bool{true, false} {
+		g.Draw(screen)
+		n := testing.AllocsPerRun(20, func() {
+			if full {
+				g.paintedOn = nil
+			}
+			g.ticks++
+			g.step(g.cpu(0))
+			g.Draw(screen)
+		})
+		if n != 0 {
+			t.Errorf("full %v: %v allocations", full, n)
+		}
+	}
+}

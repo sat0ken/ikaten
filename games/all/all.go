@@ -7,7 +7,6 @@ import (
 	"image/color"
 
 	ebiten "github.com/sat0ken/ikaten"
-	"github.com/sat0ken/ikaten/ebitenutil"
 	"github.com/sat0ken/ikaten/games/air"
 	"github.com/sat0ken/ikaten/games/blocks"
 	"github.com/sat0ken/ikaten/games/bomb"
@@ -17,6 +16,7 @@ import (
 	"github.com/sat0ken/ikaten/games/flappy"
 	"github.com/sat0ken/ikaten/games/jump"
 	"github.com/sat0ken/ikaten/games/kart"
+	"github.com/sat0ken/ikaten/games/pixtext"
 	"github.com/sat0ken/ikaten/games/shooter"
 	"github.com/sat0ken/ikaten/games/snake"
 	"github.com/sat0ken/ikaten/games/tank"
@@ -26,12 +26,12 @@ import (
 )
 
 const (
-	ScreenWidth  = 120
-	ScreenHeight = 120
+	ScreenWidth  = 240
+	ScreenHeight = 240
 	holdTicks    = 60 // A and B held this long return to the menu
-	rowHeight    = 9
-	listTop      = 15
-	shownRows    = 9 // the list scrolls to keep the cursor in these rows
+	rowHeight    = 14
+	listTop      = 34
+	shownRows    = 11 // the list scrolls to keep the cursor in these rows
 )
 
 type entry struct {
@@ -40,7 +40,7 @@ type entry struct {
 }
 
 var entries = [...]entry{
-	{"BOUNCE", "SPRITE DEMO", func() ebiten.Game { return bounce.New(ScreenWidth, ScreenHeight, 15) }},
+	{"BOUNCE", "SPRITE DEMO", func() ebiten.Game { return bounce.New(ScreenWidth, ScreenHeight, 30) }},
 	{"SNAKE", "EAT AND GROW", func() ebiten.Game { return snake.NewGame() }},
 	{"FLAPPY", "FLY THROUGH PIPES", func() ebiten.Game { return flappy.NewGame() }},
 	{"BLOCKS", "FALLING BLOCKS", func() ebiten.Game { return &blocks.Game{} }},
@@ -76,6 +76,8 @@ func (g *Game) Update() error {
 		}
 		if g.held >= holdTicks {
 			g.game, g.held = nil, 0
+			// A game may have kept its screen between frames; the menu clears it.
+			ebiten.SetScreenClearedEveryFrame(true)
 			return nil
 		}
 		g.fresh = false
@@ -89,6 +91,7 @@ func (g *Game) Update() error {
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyZ) || inpututil.IsKeyJustPressed(ebiten.KeySpace) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
 		// The game starts on the next tick, so it does not see this press as new.
+		ebiten.SetScreenClearedEveryFrame(true)
 		g.game, g.fresh = entries[g.cursor].start(), true
 	}
 	return nil
@@ -105,7 +108,13 @@ var (
 	menuBackground = color.RGBA{16, 24, 48, 255}
 	imageBar       = pixel(color.RGBA{50, 90, 170, 255})
 	imageLine      = pixel(color.RGBA{90, 120, 180, 255})
+	textWhite      = color.RGBA{240, 244, 250, 255}
+	textYellow     = color.RGBA{255, 220, 60, 255}
+	textGray       = color.RGBA{150, 166, 200, 255}
+	textShadow     = color.RGBA{50, 90, 170, 255}
 )
+
+var line pixtext.Line
 
 func pixel(c color.RGBA) *ebiten.Image {
 	img := ebiten.NewImage(1, 1)
@@ -124,40 +133,51 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		g.game.Draw(screen)
 		if g.held > 0 {
 			// A bar fills while A and B are held.
-			fillRect(screen, imageBar, 0, 0, screen.Bounds().Dx()*g.held/holdTicks, 2)
+			fillRect(screen, imageBar, 0, 0, screen.Bounds().Dx()*g.held/holdTicks, 3)
 		}
 		return
 	}
+	const mid = ScreenWidth / 2
 	screen.Fill(menuBackground)
-	ebitenutil.DebugPrintAt(screen, "IKATEN GAMES", 24, -1)
-	fillRect(screen, imageLine, 4, listTop-3, ScreenWidth-8, 1)
+	line.Reset().Str("IKATEN GAMES").Shade(textShadow).Center(screen, mid, 8, 2, textYellow)
+	fillRect(screen, imageLine, 8, listTop-5, ScreenWidth-16, 1)
 	// Scroll so that the cursor stays in view, a row from the edge when it can.
 	top := max(0, min(g.cursor-shownRows/2, len(entries)-shownRows))
 	for i := top; i < min(top+shownRows, len(entries)); i++ {
 		e := &entries[i]
 		y := listTop + (i-top)*rowHeight
+		c := textGray
 		if i == g.cursor {
-			fillRect(screen, imageBar, 4, y, ScreenWidth-8, rowHeight)
+			fillRect(screen, imageBar, 8, y, ScreenWidth-16, rowHeight-1)
 			if g.ticks/20%2 == 0 {
-				ebitenutil.DebugPrintAt(screen, ">", 8, y-2)
+				line.Reset().Str(">").Draw(screen, 16, y+3, 1, textYellow)
 			}
+			c = textWhite
 		}
-		ebitenutil.DebugPrintAt(screen, e.name, 18, y-2)
+		line.Reset().Str(e.name).Draw(screen, 30, y+3, 1, c)
 	}
-	fillRect(screen, imageLine, 4, listTop+shownRows*rowHeight+2, ScreenWidth-8, 1)
+	bottom := listTop + shownRows*rowHeight + 3
+	fillRect(screen, imageLine, 8, bottom, ScreenWidth-16, 1)
 	// Marks show that the list goes on.
 	if top > 0 {
-		fillRect(screen, imageLine, ScreenWidth-10, listTop-6, 3, 1)
-		fillRect(screen, imageLine, ScreenWidth-9, listTop-7, 1, 1)
+		arrow(screen, ScreenWidth-16, listTop-12, -1)
 	}
 	if top+shownRows < len(entries) {
-		y := listTop + shownRows*rowHeight + 5
-		fillRect(screen, imageLine, ScreenWidth-10, y, 3, 1)
-		fillRect(screen, imageLine, ScreenWidth-9, y+1, 1, 1)
+		arrow(screen, ScreenWidth-16, bottom+4, 1)
 	}
-	note := entries[g.cursor].note
-	ebitenutil.DebugPrintAt(screen, note, ScreenWidth/2-len(note)*3, 98)
-	ebitenutil.DebugPrintAt(screen, "HOLD A+B: MENU", 18, 108)
+	line.Reset().Str(entries[g.cursor].note).Center(screen, mid, bottom+12, 1, textWhite)
+	line.Reset().Str("HOLD A+B: MENU").Center(screen, mid, bottom+28, 1, textGray)
+}
+
+// arrow draws a small triangle pointing up (dir -1) or down (dir 1).
+func arrow(screen *ebiten.Image, x, y, dir int) {
+	for i := range 4 {
+		r := i // widening downward: pointing up
+		if dir > 0 {
+			r = 3 - i
+		}
+		fillRect(screen, imageLine, x-r, y+i, 2*r+1, 1)
+	}
 }
 
 // fillRect draws a 1x1 image scaled to a rectangle.

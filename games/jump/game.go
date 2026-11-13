@@ -16,11 +16,16 @@ import (
 )
 
 const (
-	ScreenWidth  = 120
-	ScreenHeight = 120
+	ScreenWidth  = 240
+	ScreenHeight = 240
 	tps          = 60
-	tile         = 8
+	tile         = 8 // in the game's pixels
 	rows         = 15
+
+	// The game runs in pixels of its own, half the screen's: zoom screen
+	// pixels to each way. view is how much of the stage shows across.
+	zoom = 2
+	view = ScreenWidth / zoom
 
 	// The gopher's box, in pixels, from the left and the top of its
 	// position.
@@ -103,11 +108,13 @@ type Game struct {
 
 	enemies [maxEnemies]enemy
 
-	// The heights of the far and the near hills under each screen column.
-	far, near [ScreenWidth]int
+	// The screen the whole of which has been filled, so that it is opaque.
+	filled *ebiten.Image
 }
 
 func NewGame() *Game {
+	// Draw covers the whole screen anyway.
+	ebiten.SetScreenClearedEveryFrame(false)
 	g := &Game{}
 	g.startStage(0)
 	g.mode = modeTitle
@@ -159,7 +166,7 @@ func (g *Game) respawn() {
 	g.facing = 1
 	g.dash, g.hurt, g.jumpPressed = 0, 0, 99
 	g.onGround, g.jumping = false, false
-	g.camera = max(0, min(g.x-40, float32(g.width*tile-ScreenWidth)))
+	g.camera = max(0, min(g.x-40, float32(g.width*tile-view)))
 }
 
 func pressed(k ebiten.Key) bool { return inpututil.IsKeyJustPressed(k) }
@@ -197,7 +204,9 @@ func (g *Game) Update() error {
 		if startPressed() {
 			g.livesLeft, g.gems, g.score = lives, 0, 0
 			g.startStage(0)
+			break
 		}
+		g.demo()
 	case modeIntro:
 		if g.modeTicks > 90 {
 			g.setMode(modePlay)
@@ -268,7 +277,7 @@ func (g *Game) step(in input) {
 		want = g.x - 66
 	}
 	g.camera += (want - g.camera) * 0.1
-	g.camera = max(0, min(g.camera, float32(g.width*tile-ScreenWidth)))
+	g.camera = max(0, min(g.camera, float32(g.width*tile-view)))
 	if g.hurt > 0 {
 		g.hurt--
 	}
@@ -414,7 +423,7 @@ func (g *Game) updateEnemies() {
 			continue
 		}
 		// Enemies far from the view wait.
-		if e.x < g.camera-40 || e.x > g.camera+ScreenWidth+40 {
+		if e.x < g.camera-40 || e.x > g.camera+view+40 {
 			continue
 		}
 		switch e.kind {
@@ -515,3 +524,42 @@ func (g *Game) lose() {
 }
 
 func sin(x float32) float32 { return float32(math.Sin(float64(x))) }
+
+// demo runs the meadow behind the title with the gopher on its own: it runs
+// right, jumps at walls, gaps, spikes and bugs, and dashes at dirt and at
+// gaps it is falling into. A lost gopher starts over.
+func (g *Game) demo() {
+	ticks := g.modeTicks
+	g.mode = modePlay
+	g.step(g.autopilot())
+	if g.mode != modePlay {
+		g.livesLeft = lives
+		g.startStage(0)
+	}
+	g.mode, g.modeTicks = modeTitle, ticks
+}
+
+func (g *Game) autopilot() input {
+	in := input{right: true, jumpHeld: g.vy < 0}
+	front := g.x + boxW + 6
+	feet := g.y + boxH
+	wall := solid(g.tileAt(front, feet-4)) || solid(g.tileAt(front, g.y))
+	gap := !solid(g.tileAt(front, feet+2)) && g.tileAt(front, feet+2) != '-'
+	spikes := g.tileAt(front+4, feet-2) == '^' || g.tileAt(front+4, feet+2) == '^'
+	bugAhead := false
+	for i := range g.enemies {
+		e := &g.enemies[i]
+		if e.alive && e.squashed == 0 && e.x > g.x && e.x-g.x < 20 && e.y-g.y < 12 && g.y-e.y < 12 {
+			bugAhead = true
+		}
+	}
+	switch {
+	case g.tileAt(front, feet-4) == 'd' || g.tileAt(front, g.y+2) == 'd':
+		in.dash = true
+	case g.onGround && (wall || gap || spikes || bugAhead):
+		in.jump, in.jumpHeld = true, true
+	case !g.onGround && g.vy > 1 && gap && !solid(g.tileAt(g.x+boxW/2, feet+24)):
+		in.dash = true
+	}
+	return in
+}

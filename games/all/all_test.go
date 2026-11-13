@@ -89,6 +89,9 @@ func TestEveryGameStartsAndReturns(t *testing.T) {
 	if w, h := s.Layout(240, 240); w != ScreenWidth || h != ScreenHeight {
 		t.Fatalf("menu layout %dx%d", w, h)
 	}
+	if !ebiten.IsScreenClearedEveryFrame() {
+		t.Fatal("back on the menu, the screen is not cleared every frame")
+	}
 	for i, e := range entries {
 		t.Logf("heap on the menu before %-7s %7d B", e.name, s.heap[i])
 	}

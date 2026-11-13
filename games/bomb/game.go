@@ -14,12 +14,12 @@ import (
 )
 
 const (
-	ScreenWidth  = 120
-	ScreenHeight = 120
+	ScreenWidth  = 240
+	ScreenHeight = 240
 	tps          = 60
 
 	cols, rows = 13, 11
-	tile       = 9  // pixels
+	tile       = 18 // pixels
 	unit       = 48 // position units per tile; a gopher's center is in units
 	half       = unit / 2
 
@@ -145,9 +145,20 @@ type Game struct {
 	dist   [rows][cols]int
 	first  [rows][cols]dir // the first move on the way to each cell
 	cells  [1 + 4*maxFire]int
+
+	// What the screen shows from the last frame, for redrawing only what
+	// changed: each cell's summary, the cells the gophers and bombs
+	// covered, the screen, and the boxes over the arena.
+	painted     [rows][cols]uint32
+	covered     [rows][cols]bool
+	paintedOn   *ebiten.Image
+	paintedKey  int
+	paintedBars uint64
 }
 
 func NewGame() *Game {
+	// Draw redraws only what changed, on the screen of the last frame.
+	ebiten.SetScreenClearedEveryFrame(false)
 	g := &Game{rng: 2463534242, level: 1}
 	g.newMatch()
 	g.mode = modeTitle
