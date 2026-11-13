@@ -8,6 +8,7 @@ import (
 
 	ebiten "github.com/sat0ken/ikaten"
 	"github.com/sat0ken/ikaten/ebitenutil"
+	"github.com/sat0ken/ikaten/games/air"
 	"github.com/sat0ken/ikaten/games/blocks"
 	"github.com/sat0ken/ikaten/games/bounce"
 	"github.com/sat0ken/ikaten/games/dungeon"
@@ -25,8 +26,9 @@ const (
 	ScreenWidth  = 120
 	ScreenHeight = 120
 	holdTicks    = 60 // A and B held this long return to the menu
-	rowHeight    = 8
-	listTop      = 14
+	rowHeight    = 9
+	listTop      = 15
+	shownRows    = 9 // the list scrolls to keep the cursor in these rows
 )
 
 type entry struct {
@@ -45,6 +47,7 @@ var entries = [...]entry{
 	{"U-BOAT", "SUBMARINE ATTACK", func() ebiten.Game { return uboat.NewGame() }},
 	{"TANK", "TANK BATTLE", func() ebiten.Game { return tank.NewGame() }},
 	{"TRAIN", "TRAIN DRIVING", func() ebiten.Game { return train.NewGame() }},
+	{"AIR", "CARRIER AIR WAR", func() ebiten.Game { return air.NewGame() }},
 }
 
 type Game struct {
@@ -122,8 +125,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(menuBackground)
 	ebitenutil.DebugPrintAt(screen, "IKATEN GAMES", 24, -1)
 	fillRect(screen, imageLine, 4, listTop-3, ScreenWidth-8, 1)
-	for i, e := range entries {
-		y := listTop + i*rowHeight
+	// Scroll so that the cursor stays in view, a row from the edge when it can.
+	top := max(0, min(g.cursor-shownRows/2, len(entries)-shownRows))
+	for i := top; i < min(top+shownRows, len(entries)); i++ {
+		e := &entries[i]
+		y := listTop + (i-top)*rowHeight
 		if i == g.cursor {
 			fillRect(screen, imageBar, 4, y, ScreenWidth-8, rowHeight)
 			if g.ticks/20%2 == 0 {
@@ -132,7 +138,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		}
 		ebitenutil.DebugPrintAt(screen, e.name, 18, y-2)
 	}
-	fillRect(screen, imageLine, 4, listTop+len(entries)*rowHeight+2, ScreenWidth-8, 1)
+	fillRect(screen, imageLine, 4, listTop+shownRows*rowHeight+2, ScreenWidth-8, 1)
+	// Marks show that the list goes on.
+	if top > 0 {
+		fillRect(screen, imageLine, ScreenWidth-10, listTop-6, 3, 1)
+		fillRect(screen, imageLine, ScreenWidth-9, listTop-7, 1, 1)
+	}
+	if top+shownRows < len(entries) {
+		y := listTop + shownRows*rowHeight + 5
+		fillRect(screen, imageLine, ScreenWidth-10, y, 3, 1)
+		fillRect(screen, imageLine, ScreenWidth-9, y+1, 1, 1)
+	}
 	note := entries[g.cursor].note
 	ebitenutil.DebugPrintAt(screen, note, ScreenWidth/2-len(note)*3, 98)
 	ebitenutil.DebugPrintAt(screen, "HOLD A+B: MENU", 18, 108)
