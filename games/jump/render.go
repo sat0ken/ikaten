@@ -35,12 +35,19 @@ const T = tile * zoom
 func (g *Game) Draw(screen *ebiten.Image) {
 	lk := &looks[g.stage]
 	cam := int(g.camera * zoom)
+	mark(0)
 	g.drawBackground(screen, lk, cam)
+	mark(1)
 	g.drawTiles(screen, cam)
+	mark(2)
 	g.drawEnemies(screen, cam)
+	mark(3)
 	g.drawGopher(screen, cam) // behind the title too, where it runs on its own
+	mark(4)
 	g.drawHUD(screen)
+	mark(5)
 	g.drawOverlay(screen)
+	mark(6)
 }
 
 // tri is a triangle wave of period p, from 0 to 64, in integers.

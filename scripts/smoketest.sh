@@ -7,7 +7,7 @@ mkdir -p build/smoke
 # memory for them, so they are not built for it.
 only240="bomb jump all"
 for target in badge esp32s3 esp32 pico gopher-badge gopher-board; do
- for example in bounce assets snake flappy blocks dungeon shooter kart uboat tank train air fish bomb jump all probe benchmark; do
+ for example in bounce assets snake flappy blocks dungeon shooter kart uboat tank train air fish bomb jump all probe drawprobe benchmark; do
   if [ "$target" = esp32 ]; then
    case " $only240 " in *" $example "*) echo "Skipping $example for $target (240x240 only)"; continue;; esac
   fi

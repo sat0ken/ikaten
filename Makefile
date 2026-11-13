@@ -4,7 +4,7 @@ TARGET ?= badge
 GAME ?= bounce
 export GOFLAGS ?= -buildvcs=false
 
-.PHONY: test check build wasm serve smoketest benchmark probe allocs compat clean
+.PHONY: test check build wasm serve smoketest benchmark probe drawprobe allocs compat clean
 
 test:
 	$(GO) test ./...
@@ -30,6 +30,10 @@ smoketest:
 probe:
 	mkdir -p build
 	$(TINYGO) build -target ./targets/$(TARGET).json -size short -o build/probe-$(TARGET).elf ./examples/probe
+
+drawprobe:
+	mkdir -p build
+	$(TINYGO) build -target ./targets/$(TARGET).json -size short -o build/drawprobe-$(TARGET).elf ./examples/drawprobe
 
 benchmark:
 	mkdir -p build
