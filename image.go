@@ -124,19 +124,17 @@ func (i *Image) Fill(clr color.Color) {
 	i.mutable()
 	v, visible := quantize(clr)
 	b := i.view.Bounds
+	buf := i.view.Buffer
 	if i.wholeBuffer() {
-		for p := range i.view.Buffer.Pixels {
-			i.view.Buffer.Pixels[p] = v
-		}
-		i.view.Buffer.SetMaskRange(0, len(i.view.Buffer.Pixels), visible)
-		i.view.Buffer.Opaque = visible
+		raster.FillPixels(buf.Pixels, v)
+		buf.SetMaskRange(0, len(buf.Pixels), visible)
+		buf.Opaque = visible
 		return
 	}
 	for y := b.Min.Y; y < b.Max.Y; y++ {
 		p := i.view.Index(b.Min.X, y)
-		for x := 0; x < b.Dx(); x++ {
-			i.view.Buffer.Set(p+x, v, visible)
-		}
+		raster.FillPixels(buf.Pixels[p:p+b.Dx()], v)
+		buf.SetMaskRange(p, b.Dx(), visible)
 	}
 }
 func (i *Image) Clear() {

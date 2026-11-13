@@ -55,15 +55,16 @@ func (b *Buffer) SetMaskRange(start, count int, visible bool) {
 	if !visible {
 		b.Opaque = false
 	}
-	if b.Mask == nil || count == 0 {
+	mask := b.Mask
+	if mask == nil || count == 0 {
 		return
 	}
 	end := start + count
 	for start < end && start&7 != 0 {
 		if visible {
-			b.Mask[start>>3] |= 1 << uint(start&7)
+			mask[start>>3] |= 1 << uint(start&7)
 		} else {
-			b.Mask[start>>3] &^= 1 << uint(start&7)
+			mask[start>>3] &^= 1 << uint(start&7)
 		}
 		start++
 	}
@@ -72,14 +73,14 @@ func (b *Buffer) SetMaskRange(start, count int, visible bool) {
 		value = 255
 	}
 	for start+8 <= end {
-		b.Mask[start>>3] = value
+		mask[start>>3] = value
 		start += 8
 	}
 	for start < end {
 		if visible {
-			b.Mask[start>>3] |= 1 << uint(start&7)
+			mask[start>>3] |= 1 << uint(start&7)
 		} else {
-			b.Mask[start>>3] &^= 1 << uint(start&7)
+			mask[start>>3] &^= 1 << uint(start&7)
 		}
 		start++
 	}

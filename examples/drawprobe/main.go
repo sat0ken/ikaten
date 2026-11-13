@@ -23,6 +23,8 @@ func op(name string, n int, f func()) {
 	}
 	us := time.Since(start).Microseconds()
 	println(name, ",", n, ",", us/int64(n), ".", us*10/int64(n)%10)
+	// A pause lets the USB serial send the line: printing faster lost lines.
+	time.Sleep(50 * time.Millisecond)
 }
 
 func pixel(c color.RGBA) *ebiten.Image {
@@ -49,7 +51,8 @@ func shape(w, h int, opaque bool) *ebiten.Image {
 }
 
 func main() {
-	time.Sleep(2 * time.Second)
+	// Time to open the monitor after flashing.
+	time.Sleep(3 * time.Second)
 	println("name,iterations,us_per_op")
 	loops()
 	green := pixel(color.RGBA{90, 190, 80, 255})
