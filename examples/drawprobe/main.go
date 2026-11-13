@@ -51,6 +51,7 @@ func shape(w, h int, opaque bool) *ebiten.Image {
 func main() {
 	time.Sleep(2 * time.Second)
 	println("name,iterations,us_per_op")
+	loops()
 	green := pixel(color.RGBA{90, 190, 80, 255})
 	var o ebiten.DrawImageOptions
 	at := func(img *ebiten.Image, sx, sy, x, y float64) {
