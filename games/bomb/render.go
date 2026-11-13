@@ -4,7 +4,6 @@ import (
 	"image/color"
 
 	ebiten "github.com/sat0ken/ikaten"
-	"github.com/sat0ken/ikaten/ebitenutil"
 )
 
 // The arena fills the screen between the score bar and the item bar.
@@ -123,7 +122,7 @@ func (g *Game) drawBombs(screen *ebiten.Image) {
 			op.GeoM.Translate(4.5, 4.5)
 		}
 		op.GeoM.Translate(float64(x), float64(y))
-		screen.DrawImage(imageBomb[frame], &op)
+		put(screen, imageBomb[frame], &op)
 	}
 }
 
@@ -153,7 +152,7 @@ func (g *Game) drawGophers(screen *ebiten.Image) {
 				op.GeoM.Translate(-4.5, -11)
 				op.GeoM.Scale(s, s)
 				op.GeoM.Translate(float64(x)+4.5, float64(y)+11)
-				screen.DrawImage(imageFaint[i], &op)
+				put(screen, imageFaint[i], &op)
 			}
 			continue
 		}
@@ -175,7 +174,7 @@ func (g *Game) drawGophers(screen *ebiten.Image) {
 			op.GeoM.Translate(9, 0)
 		}
 		op.GeoM.Translate(float64(x), float64(y))
-		screen.DrawImage(img, &op)
+		put(screen, img, &op)
 	}
 }
 
@@ -256,7 +255,7 @@ func (g *Game) drawOverlay(screen *ebiten.Image) {
 
 func (g *Game) drawTitle(screen *ebiten.Image) {
 	box(screen, 10, 18, 100, 84)
-	ebitenutil.DebugPrintAt(screen, "GOPHER BOMB", 27, 16)
+	debugPrint(screen, "GOPHER BOMB", 27, 16)
 	drawScaled(screen, imageGopher[0][down][g.modeTicks/20%2], 47, 32, 3)
 	buf.reset().str("A: BOMB  B: KICK").center(screen, 70, textWhite)
 	buf.reset().str("LAST GOPHER STANDING WINS").center(screen, 78, textGray)
@@ -315,20 +314,20 @@ func fill(screen *ebiten.Image, c color.RGBA, x, y, w, h int) {
 	var op ebiten.DrawImageOptions
 	op.GeoM.Scale(float64(w), float64(h))
 	op.GeoM.Translate(float64(x), float64(y))
-	screen.DrawImage(paint(c), &op)
+	put(screen, paint(c), &op)
 }
 
 func drawAt(screen, img *ebiten.Image, x, y int) {
 	var op ebiten.DrawImageOptions
 	op.GeoM.Translate(float64(x), float64(y))
-	screen.DrawImage(img, &op)
+	put(screen, img, &op)
 }
 
 func drawScaled(screen, img *ebiten.Image, x, y int, s float64) {
 	var op ebiten.DrawImageOptions
 	op.GeoM.Scale(s, s)
 	op.GeoM.Translate(float64(x), float64(y))
-	screen.DrawImage(img, &op)
+	put(screen, img, &op)
 }
 
 // text builds a line of the 3x5 font in a fixed buffer, so that drawing
@@ -405,6 +404,6 @@ func drawText(screen *ebiten.Image, text []byte, x, y, scale int, c color.RGBA) 
 		op.GeoM.Translate(float64(x+i*4*scale), float64(y))
 		op.ColorScale.Reset()
 		op.ColorScale.Scale(float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, 1)
-		screen.DrawImage(img, &op)
+		put(screen, img, &op)
 	}
 }

@@ -241,8 +241,10 @@ func (g *Game) open(c, r int) bool {
 
 func pressed(k ebiten.Key) bool { return inpututil.IsKeyJustPressed(k) }
 
+// Layout gives a screen pixelScale times the game's 120 by 120: the game
+// keeps its coordinates and draws everything that much larger.
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return ScreenWidth, ScreenHeight
+	return ScreenWidth * pixelScale, ScreenHeight * pixelScale
 }
 
 // input is what the person does in one tick.

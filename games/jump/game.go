@@ -164,8 +164,10 @@ func (g *Game) respawn() {
 
 func pressed(k ebiten.Key) bool { return inpututil.IsKeyJustPressed(k) }
 
+// Layout gives a screen pixelScale times the game's 120 by 120: the game
+// keeps its coordinates and draws everything that much larger.
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return ScreenWidth, ScreenHeight
+	return ScreenWidth * pixelScale, ScreenHeight * pixelScale
 }
 
 // input is what the player does in one tick.
@@ -197,7 +199,9 @@ func (g *Game) Update() error {
 		if startPressed() {
 			g.livesLeft, g.gems, g.score = lives, 0, 0
 			g.startStage(0)
+			break
 		}
+		g.demo()
 	case modeIntro:
 		if g.modeTicks > 90 {
 			g.setMode(modePlay)
@@ -515,3 +519,42 @@ func (g *Game) lose() {
 }
 
 func sin(x float32) float32 { return float32(math.Sin(float64(x))) }
+
+// demo runs the meadow behind the title with the gopher on its own: it runs
+// right, jumps at walls, gaps, spikes and bugs, and dashes at dirt and at
+// gaps it is falling into. A lost gopher starts over.
+func (g *Game) demo() {
+	ticks := g.modeTicks
+	g.mode = modePlay
+	g.step(g.autopilot())
+	if g.mode != modePlay {
+		g.livesLeft = lives
+		g.startStage(0)
+	}
+	g.mode, g.modeTicks = modeTitle, ticks
+}
+
+func (g *Game) autopilot() input {
+	in := input{right: true, jumpHeld: g.vy < 0}
+	front := g.x + boxW + 6
+	feet := g.y + boxH
+	wall := solid(g.tileAt(front, feet-4)) || solid(g.tileAt(front, g.y))
+	gap := !solid(g.tileAt(front, feet+2)) && g.tileAt(front, feet+2) != '-'
+	spikes := g.tileAt(front+4, feet-2) == '^' || g.tileAt(front+4, feet+2) == '^'
+	bugAhead := false
+	for i := range g.enemies {
+		e := &g.enemies[i]
+		if e.alive && e.squashed == 0 && e.x > g.x && e.x-g.x < 20 && e.y-g.y < 12 && g.y-e.y < 12 {
+			bugAhead = true
+		}
+	}
+	switch {
+	case g.tileAt(front, feet-4) == 'd' || g.tileAt(front, g.y+2) == 'd':
+		in.dash = true
+	case g.onGround && (wall || gap || spikes || bugAhead):
+		in.jump, in.jumpHeld = true, true
+	case !g.onGround && g.vy > 1 && gap && !solid(g.tileAt(g.x+boxW/2, feet+24)):
+		in.dash = true
+	}
+	return in
+}

@@ -10,10 +10,9 @@ import (
 	"github.com/sat0ken/ikaten/games/jump"
 )
 
-// autoplay starts the game and jumps now and then: the gopher stands at the
-// start of the meadow while the screen and the bugs move. It prints timings
-// every 10 seconds. It presses Space: boards read their buttons into KeyZ and
-// KeyX every tick, which would hide autoplay's presses.
+// autoplay stays on the title, where the gopher runs the meadow on its own
+// and the screen scrolls all the time, the worst case for drawing. It
+// prints timings every 10 seconds.
 type autoplay struct {
 	*jump.Game
 	ticks         int
@@ -24,7 +23,6 @@ type autoplay struct {
 
 func (g *autoplay) Update() error {
 	g.ticks++
-	ebiten.SetKeyState(ebiten.KeySpace, g.ticks%90 == 0)
 	now := time.Now()
 	if g.last.IsZero() {
 		g.last, g.prev = now, now

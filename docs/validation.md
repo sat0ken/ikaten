@@ -661,3 +661,33 @@ Linux向けのTinyGoで、trainをimportしただけのプログラムの起動�
 バッジとGopher Boardでは実機で確認していません。
 
 ランチャー `games/all` にGOPHER JUMPを加え、14本になりました。
+
+## 240×240の試験(試験用ブランチ `claude/hires-240-test`)
+
+これまでのゲームは120×120を2倍に拡大して表示しています。240×240で作った場合にFPSがどれだけ下がるかを確かめるため、jump(画面全体がスクロールする重い例)とbomb(盤面がほとんど止まっている例)を、ビルドタグ `ikaten_hires` で240×240にできるようにしました。ゲームの座標と処理は120×120のままで、描画だけを2倍の解像度で行います(`put` が全ての描画に2倍の拡大を掛け、`Layout` が240×240を返します)。絵は2倍に拡大して描くだけですが、塗るピクセル数は本物の240×240版と同じなので、性能の比較には足ります。ただし、デバッグ用フォントの文字は大きさが変わらないので小さく見えます。
+
+jumpのタイトル画面では、Gopherが自動で草原を走るようにしました(壁、穴、トゲ、虫の前で跳び、土の壁と落ちかけた穴でダッシュ)。バッジではジョイスティックの読み取りが毎ティック矢印キーを上書きするため、ベンチマークから走らせることができないからです。jumpのベンチマークはキーを押さずにタイトルのまま測ります。
+
+### バッジでの計測手順
+
+```sh
+tinygo flash -target ./targets/badge.json -tags ikaten_benchmark ./examples/jump
+tinygo monitor -target ./targets/badge.json
+tinygo flash -target ./targets/badge.json -tags "ikaten_benchmark ikaten_hires" ./examples/jump
+tinygo monitor -target ./targets/badge.json
+```
+
+bombも `./examples/bomb` で同じです。10秒ごとに、フレーム数、TPS、`Update`・`Draw`・`Present` の時間、ヒープを出します。遊んで確かめるときは `-tags ikaten_hires` だけを付けます。
+
+### ホストでの比較(参考)
+
+Goで、`Update` と `Draw` を合わせた1ティックの時間です(3回の範囲)。実機の予測には使えませんが、描画の増え方の目安です。
+
+| ゲーム | 120×120 | 240×240 | 倍率 |
+| --- | ---: | ---: | ---: |
+| jump(タイトルのデモ、常にスクロール) | 79〜92µs | 180〜203µs | 約2.2倍 |
+| bomb(CPU3匹の対戦) | 54〜63µs | 186〜197µs | 約3.2倍 |
+
+TinyGoのバッジ向けビルドでは、静的RAMは両方の解像度で同じです(jump 46KB、bomb 56KB)。240×240では画面のために実行時に約122KBを確保します。flappyとblocksと同じ大きさです。ESP32無印のボードには収まりません。
+
+バッジでの計測はまだです。

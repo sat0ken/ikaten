@@ -346,3 +346,17 @@ func TestGlyphs(t *testing.T) {
 		}
 	}
 }
+
+// Behind the title the gopher runs the meadow on its own, for the benchmark
+// and for show, and the title stays.
+func TestTitleDemo(t *testing.T) {
+	g := NewGame()
+	far := float32(0)
+	for range 60 * tps {
+		g.Update()
+		far = max(far, g.x)
+	}
+	if g.mode != modeTitle || far < 60*tile {
+		t.Fatalf("mode %d, the demo got to column %d", g.mode, int(far)/tile)
+	}
+}

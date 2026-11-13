@@ -4,7 +4,6 @@ import (
 	"image/color"
 
 	ebiten "github.com/sat0ken/ikaten"
-	"github.com/sat0ken/ikaten/ebitenutil"
 )
 
 var (
@@ -25,9 +24,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.drawBackground(screen, lk)
 	g.drawTiles(screen, lk)
 	g.drawEnemies(screen)
-	if g.mode != modeTitle {
-		g.drawGopher(screen)
-	}
+	g.drawGopher(screen) // behind the title too, where it runs on its own
 	g.drawHUD(screen)
 	g.drawOverlay(screen)
 }
@@ -192,7 +189,7 @@ func (g *Game) drawEnemies(screen *ebiten.Image) {
 			op.GeoM.Translate(8, 0)
 		}
 		op.GeoM.Translate(float64(x), float64(y+tile-img.Bounds().Dy()))
-		screen.DrawImage(img, &op)
+		put(screen, img, &op)
 	}
 }
 
@@ -221,7 +218,7 @@ func (g *Game) drawGopher(screen *ebiten.Image) {
 		op.GeoM.Translate(9, 0)
 	}
 	op.GeoM.Translate(float64(int(x)), float64(int(y)))
-	screen.DrawImage(imageGopher[frame], &op)
+	put(screen, imageGopher[frame], &op)
 }
 
 func (g *Game) drawHUD(screen *ebiten.Image) {
@@ -245,11 +242,11 @@ func (g *Game) drawOverlay(screen *ebiten.Image) {
 	switch g.mode {
 	case modeTitle:
 		box(screen, 12, 16, 96, 88)
-		ebitenutil.DebugPrintAt(screen, "GOPHER JUMP", 27, 14)
+		debugPrint(screen, "GOPHER JUMP", 27, 14)
 		var op ebiten.DrawImageOptions
 		op.GeoM.Scale(3, 3)
 		op.GeoM.Translate(46, 30)
-		screen.DrawImage(imageGopher[3*(g.modeTicks/30%2)], &op)
+		put(screen, imageGopher[3*(g.modeTicks/30%2)], &op)
 		buf.reset().str("A: JUMP  B: DASH").center(screen, 68, textWhite)
 		buf.reset().str("DASH BREAKS DIRT").center(screen, 76, textGray)
 		if g.modeTicks/30%2 == 0 {
@@ -279,7 +276,7 @@ func (g *Game) drawOverlay(screen *ebiten.Image) {
 		var op ebiten.DrawImageOptions
 		op.GeoM.Scale(2, 2)
 		op.GeoM.Translate(51, 50)
-		screen.DrawImage(imageGopher[3*(g.modeTicks/20%2)], &op)
+		put(screen, imageGopher[3*(g.modeTicks/20%2)], &op)
 		buf.reset().str("SCORE ").num(g.score).center(screen, 76, textYellow)
 	}
 }
@@ -333,13 +330,13 @@ func fill(screen *ebiten.Image, c color.RGBA, x, y, w, h int) {
 	var op ebiten.DrawImageOptions
 	op.GeoM.Scale(float64(w), float64(h))
 	op.GeoM.Translate(float64(x), float64(y))
-	screen.DrawImage(paint(c), &op)
+	put(screen, paint(c), &op)
 }
 
 func drawAt(screen, img *ebiten.Image, x, y int) {
 	var op ebiten.DrawImageOptions
 	op.GeoM.Translate(float64(x), float64(y))
-	screen.DrawImage(img, &op)
+	put(screen, img, &op)
 }
 
 // text builds a line of the 3x5 font in a fixed buffer, so that drawing
@@ -409,6 +406,6 @@ func drawText(screen *ebiten.Image, text []byte, x, y, scale int, c color.RGBA) 
 		op.GeoM.Translate(float64(x+i*4*scale), float64(y))
 		op.ColorScale.Reset()
 		op.ColorScale.Scale(float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, 1)
-		screen.DrawImage(img, &op)
+		put(screen, img, &op)
 	}
 }
