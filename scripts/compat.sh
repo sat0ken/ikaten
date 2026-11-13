@@ -175,6 +175,61 @@ func main() {
 }
 EOF
 GOOS=js GOARCH=wasm go build -mod=mod -o ../fish-ebitengine.wasm ./fishmain
+# bomb, like train, air and fish, draws its images in code. Its main is
+# written here.
+rm -rf bomb bombmain
+mkdir -p bomb bombmain
+for f in ../../games/bomb/*.go; do
+ case "$f" in *_test.go) continue;; esac
+ sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+  -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "bomb/$(basename "$f")"
+done
+cat > bombmain/main.go <<'EOF'
+package main
+
+import (
+	"log"
+
+	"github.com/hajimehoshi/ebiten/v2"
+	"ikaten-compat/bomb"
+)
+
+func main() {
+	ebiten.SetWindowSize(480, 480)
+	ebiten.SetWindowTitle("ikaten gopher bomb")
+	if err := ebiten.RunGame(bomb.NewGame()); err != nil {
+		log.Fatal(err)
+	}
+}
+EOF
+GOOS=js GOARCH=wasm go build -mod=mod -o ../bomb-ebitengine.wasm ./bombmain
+# jump, like bomb, draws its images in code. Its main is written here.
+rm -rf jump jumpmain
+mkdir -p jump jumpmain
+for f in ../../games/jump/*.go; do
+ case "$f" in *_test.go) continue;; esac
+ sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+  -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "jump/$(basename "$f")"
+done
+cat > jumpmain/main.go <<'EOF'
+package main
+
+import (
+	"log"
+
+	"github.com/hajimehoshi/ebiten/v2"
+	"ikaten-compat/jump"
+)
+
+func main() {
+	ebiten.SetWindowSize(480, 480)
+	ebiten.SetWindowTitle("ikaten gopher jump")
+	if err := ebiten.RunGame(jump.NewGame()); err != nil {
+		log.Fatal(err)
+	}
+}
+EOF
+GOOS=js GOARCH=wasm go build -mod=mod -o ../jump-ebitengine.wasm ./jumpmain
 # all imports the games above from this module.
 rm -rf all allmain
 mkdir -p all allmain
@@ -183,4 +238,4 @@ sed -e 's#"github.com/sat0ken/ikaten/games/\([a-z]*\)"#"ikaten-compat/\1"#' \
  -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' ../../games/all/all.go > all/all.go
 cp ../../compat/all_main.go.txt allmain/main.go
 GOOS=js GOARCH=wasm go build -mod=mod -o ../all-ebitengine.wasm ./allmain
-echo "Ebitengine compatibility build passed (bounce: shared game.go; snake, flappy, blocks, dungeon, shooter, kart, uboat, tank, train, air, fish and all: import paths rewritten)"
+echo "Ebitengine compatibility build passed (bounce: shared game.go; snake, flappy, blocks, dungeon, shooter, kart, uboat, tank, train, air, fish, bomb, jump and all: import paths rewritten)"
