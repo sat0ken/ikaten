@@ -146,6 +146,7 @@ func scaled(dst, src View, o Options) bool {
 	pixels, mask, spix, smask, sdata := db.Pixels, db.Mask, sb.Pixels, sb.Mask, sb.Data
 	sopaque := sb.Opaque || smask == nil
 	stride := dst.Stride
+	tinted := o.R != 256 || o.G != 256 || o.Blue != 256
 	// An opaque destination's mask bits are already set.
 	marking := !db.Opaque && mask != nil
 	for y := y0; y < y1; {
@@ -186,7 +187,9 @@ func scaled(dst, src View, o Options) bool {
 				} else {
 					v = spix[p]
 				}
-				v = tint(v, &o)
+				if tinted {
+					v = tint(v, &o)
+				}
 				for d := di + i; d <= last+i; d += stride {
 					pixels[d] = v
 					if marking {
@@ -353,6 +356,27 @@ func integer(dst, src View, o Options) {
 			// An opaque destination's mask bits are already set.
 			if !db.Opaque {
 				db.SetMaskRange(di, n, true)
+			}
+		case plain && o.Blend != Copy && sdata == nil:
+			// Magnified with a mask: each source pixel's bit is read once,
+			// and a shown pixel is written as a run sx wide.
+			dmask := db.Mask
+			marking := !db.Opaque && dmask != nil
+			out := dpix[di : di+n]
+			column, i := firstColumn, 0
+			for run := sx - firstRepeat; i < n; column, run = column+1, sx {
+				end := min(n, i+run)
+				p := si + column
+				if smask[p>>3]&(1<<uint(p&7)) != 0 {
+					v := spix[p]
+					for j := i; j < end; j++ {
+						out[j] = v
+					}
+					if marking {
+						db.SetMaskRange(di+i, end-i, true)
+					}
+				}
+				i = end
 			}
 		case plain:
 			column, repeat := firstColumn, firstRepeat
