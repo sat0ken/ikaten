@@ -11,6 +11,12 @@ for target in badge esp32s3 esp32 pico gopher-badge gopher-board; do
   if [ "$target" = esp32 ]; then
    case " $only240 " in *" $example "*) echo "Skipping $example for $target (240x240 only)"; continue;; esac
   fi
+  # The launcher holds every game's images, about 2.7 MB, more than these
+  # boards' 2 MB of flash. Each game still builds for them on its own.
+  if [ "$example" = all ] && { [ "$target" = pico ] || [ "$target" = gopher-board ]; }; then
+   echo "Skipping $example for $target (2 MB flash)"
+   continue
+  fi
   echo "Building $example for $target"
   tags=
   if [ "$example" = benchmark ]; then tags=ikaten_benchmark; fi
