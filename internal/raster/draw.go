@@ -313,6 +313,26 @@ func affine(dst, src View, o Options) bool {
 	// An opaque destination's mask bits are already set.
 	marking := !dst.Buffer.Opaque && mask != nil
 	data, spix, smask := src.Buffer.Data, src.Buffer.Pixels, src.Buffer.Mask
+	if plain && opaque && sw == 1 && sh == 1 {
+		// A solid parallelogram, such as a band of sky: on each row the
+		// pixels that sample the one source pixel are a span, found from
+		// the same fixed-point coordinates the loop below steps through.
+		v := src.Buffer.Pixel(src.Offset)
+		n := x1 - x0
+		for y := y0; y < y1; y, rowX, rowY = y+1, rowX+stepX, rowY+stepY {
+			lo, hi := within(rowX, dx, 0, n)
+			lo, hi = within(rowY, dy, lo, hi)
+			if lo >= hi {
+				continue
+			}
+			di := dst.Index(x0, y)
+			fillPixels(pixels[di+lo:di+hi], v)
+			if marking {
+				dst.Buffer.SetMaskRange(di+lo, hi-lo, true)
+			}
+		}
+		return true
+	}
 	for y := y0; y < y1; y, rowX, rowY = y+1, rowX+stepX, rowY+stepY {
 		di := dst.Index(x0, y)
 		sx, sy := rowX, rowY
@@ -345,6 +365,45 @@ func affine(dst, src View, o Options) bool {
 		}
 	}
 	return true
+}
+
+// within narrows lo to hi to the steps i at which the 32.32 fixed-point
+// coordinate start+i*step is in the first source pixel, 0 to 1 exclusive.
+func within(start, step int64, lo, hi int) (int, int) {
+	const one = 1 << 32
+	switch {
+	case step == 0:
+		if start < 0 || start >= one {
+			return 0, 0
+		}
+		return lo, hi
+	case step > 0:
+		// start+i*step >= 0 and start+i*step <= one-1.
+		lo = max(lo, int(max(ceilDiv(-start, step), int64(lo))))
+		hi = min(hi, int(min(floorDiv(one-1-start, step)+1, int64(hi))))
+	default:
+		// start+i*step <= one-1 and start+i*step >= 0, the step negative.
+		lo = max(lo, int(max(ceilDiv(one-1-start, step), int64(lo))))
+		hi = min(hi, int(min(floorDiv(-start, step)+1, int64(hi))))
+	}
+	return lo, hi
+}
+
+// floorDiv and ceilDiv divide rounding down and up, for either sign.
+func floorDiv(a, b int64) int64 {
+	q := a / b
+	if (a%b != 0) && ((a < 0) != (b < 0)) {
+		q--
+	}
+	return q
+}
+
+func ceilDiv(a, b int64) int64 {
+	q := a / b
+	if (a%b != 0) && ((a < 0) == (b < 0)) {
+		q++
+	}
+	return q
 }
 
 // span returns the destination pixels covering start to start+length, clipped

@@ -39,6 +39,11 @@ func (g *autoplay) Update() error {
 		if n > 0 {
 			println("frames=", n, " tps=", int(ebiten.ActualTPS()), " update_us/frame=", (current.Update-g.stats.Update).Microseconds()/int64(n), " draw_us/frame=", (current.Draw-g.stats.Draw).Microseconds()/int64(n), " present_us/frame=", (current.Present-g.stats.Present).Microseconds()/int64(n), " heap=", mem.HeapAlloc, " gc=", mem.NumGC, " longest_gap_us=", g.longestUpdate.Microseconds())
 		}
+		if n > 0 {
+			// Where Draw's time went, in microseconds a frame.
+			t := air.SectionTimes()
+			println("  sky=", t[0].Microseconds()/int64(n), " items=", t[1].Microseconds()/int64(n), " sight=", t[2].Microseconds()/int64(n), " panel=", t[3].Microseconds()/int64(n), " boxes=", t[4].Microseconds()/int64(n))
+		}
 		g.stats = current
 		g.last = now
 		g.longestUpdate = 0

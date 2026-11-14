@@ -138,3 +138,41 @@ func TestMirrored(t *testing.T) {
 		}
 	}
 }
+
+// A solid pixel drawn rotated, skewed and scaled fills a parallelogram a row
+// at a time; it must cover exactly the pixels the per-pixel loop does. The
+// same pixel with a mask that shows it takes that loop.
+func TestSolidParallelogram(t *testing.T) {
+	solid := View{Buffer: &Buffer{Pixels: []uint16{0xbeef}, Opaque: true}, Bounds: image.Rect(0, 0, 1, 1), Stride: 1}
+	masked := View{Buffer: &Buffer{Pixels: []uint16{0xbeef}, Mask: []byte{1}}, Bounds: image.Rect(0, 0, 1, 1), Stride: 1}
+	rng := uint32(12345)
+	random := func() float32 {
+		rng ^= rng << 13
+		rng ^= rng >> 17
+		rng ^= rng << 5
+		return float32(rng%20000)/10000 - 1
+	}
+	for k := range 3000 {
+		o := Options{A: random() * 90, B: random() * 90, C: random() * 90, D: random() * 90,
+			TX: random()*60 + 30, TY: random()*60 + 30, R: 256, G: 256, Blue: 256, Alpha: 256}
+		if k%7 == 0 {
+			o.B, o.C = 0, 0 // axis-aligned, as when level
+		}
+		var got, want View
+		for i, v := range []*View{&got, &want} {
+			*v = View{Buffer: &Buffer{Pixels: make([]uint16, 64*64), Mask: make([]byte, 64*64/8)}, Bounds: image.Rect(0, 0, 64, 64), Stride: 64}
+			src := solid
+			if i == 1 {
+				src = masked
+			}
+			if !affine(*v, src, o) {
+				t.Skip("transform not handled")
+			}
+		}
+		for i := range got.Buffer.Pixels {
+			if got.Buffer.Pixels[i] != want.Buffer.Pixels[i] || got.Buffer.Visible(i) != want.Buffer.Visible(i) {
+				t.Fatalf("case %d %+v: pixel %d,%d is %x, want %x", k, o, i%64, i/64, got.Buffer.Pixels[i], want.Buffer.Pixels[i])
+			}
+		}
+	}
+}

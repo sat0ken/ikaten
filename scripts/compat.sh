@@ -134,7 +134,8 @@ rm -rf air airmain
 mkdir -p air airmain
 for f in ../../games/air/*.go; do
  case "$f" in *_test.go) continue;; esac
- sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+ sed -e 's#"github.com/sat0ken/ikaten/games/pixtext"#"ikaten-compat/pixtext"#' \
+  -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
   -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "air/$(basename "$f")"
 done
 cat > airmain/main.go <<'EOF'

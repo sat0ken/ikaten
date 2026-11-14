@@ -4,18 +4,18 @@ import (
 	"image/color"
 
 	ebiten "github.com/sat0ken/ikaten"
-	"github.com/sat0ken/ikaten/ebitenutil"
+	"github.com/sat0ken/ikaten/games/pixtext"
 )
 
 // The camera is the pilot's eye, looking along the plane's nose. A point d
 // meters from the eye along right, up and forward (x, y, z) shows at
 // (cx + focal*x/z, cy - focal*y/z).
 const (
-	viewHeight = 94 // rows of the view; the instruments are below
-	cx, cy     = 60, 46
-	focal      = 100 // pixels per radian near the center: about 62 degrees across
+	viewHeight = 188 // rows of the view; the instruments are below
+	cx, cy     = 120, 92
+	focal      = 200 // pixels per radian near the center: about 62 degrees across
 	nearZ      = 2
-	reach      = 82 // pixels from the center that cover the view in any direction
+	reach      = 164 // pixels from the center that cover the view in any direction
 
 	cloudCell = 3000 // meters between cloud slots
 	capCell   = 50   // meters between whitecap slots
@@ -48,6 +48,7 @@ var (
 	colorDark   = rgb(30, 32, 36)
 	colorBox    = rgb(14, 18, 26)
 	colorBoxHi  = rgb(70, 80, 100)
+	colorBoxLit = rgb(130, 140, 164)
 )
 
 var (
@@ -57,7 +58,10 @@ var (
 	textRed    = color.RGBA{255, 90, 70, 255}
 	textGreen  = color.RGBA{110, 230, 130, 255}
 	textAmber  = color.RGBA{255, 170, 60, 255}
+	textShadow = color.RGBA{10, 12, 16, 255}
 )
+
+var text pixtext.Line
 
 // Sea bands begin at these distances in meters, from the horizon in.
 var seaBands = [len(colorSea) - 1]float32{30000, 12000, 5000, 2000, 700}
@@ -148,21 +152,27 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if !p.alive {
 		v.eye.z = max(v.eye.z, 3)
 	}
+	mark(0)
 	g.drawSkyAndSea(screen)
 	if v.eye.z < capRange {
 		g.drawWhitecaps(screen)
 	}
+	mark(1)
 	g.collect()
 	g.drawItems(screen)
+	mark(2)
 	g.drawShots(screen)
 	if g.mode == modePlay && p.alive {
 		g.drawMarkers(screen)
 		g.drawSight(screen)
 	}
-	drawAt(screen, imageCowl, cx-32, viewHeight-9)
-	fillRect(screen, colorFrame, 0, 0, ScreenWidth, 2)
+	mark(3)
+	drawAt(screen, g.art.cowl, cx-cowlW/2, viewHeight-cowlH)
+	fillRect(screen, colorFrame, 0, 0, ScreenWidth, 4)
 	g.drawPanel(screen)
+	mark(4)
 	g.drawOverlay(screen)
+	mark(5)
 }
 
 // band fills the part of the view between two lines parallel to the
@@ -310,13 +320,13 @@ func (g *Game) drawItems(screen *ebiten.Image) {
 		case drawPlane:
 			g.drawPlane(screen, &g.planes[it.i])
 		case drawCloud:
-			g.drawBillboard(screen, imageCloud, it.pos, it.size)
+			g.drawBillboard(screen, g.art.cloud, it.pos, it.size)
 		case drawPuff:
 			pf := &g.puffs[it.i]
 			if pf.kind == puffSplash {
-				g.drawStanding(screen, imagePuff[pf.kind], pf.pos, pf.size*min(1, float32(pf.age)/20+0.3))
+				g.drawStanding(screen, g.art.puff[pf.kind], pf.pos, pf.size*min(1, float32(pf.age)/20+0.3))
 			} else {
-				g.drawBillboard(screen, imagePuff[pf.kind], pf.pos, pf.size)
+				g.drawBillboard(screen, g.art.puff[pf.kind], pf.pos, pf.size)
 			}
 		}
 	}
@@ -330,7 +340,11 @@ func (g *Game) drawBillboard(screen, img *ebiten.Image, p vec, size float32) {
 	}
 	w := size * focal / z
 	if w < 1 {
-		fillRect(screen, imagePuffDot(img), int(sx), int(sy), 1, 1)
+		dot := colorDark
+		if img == g.art.cloud {
+			dot = colorWhite
+		}
+		fillRect(screen, dot, int(sx), int(sy), 1, 1)
 		return
 	}
 	drawScaled(screen, img, sx, sy, w/float32(img.Bounds().Dx()), true)
@@ -344,14 +358,6 @@ func (g *Game) drawStanding(screen, img *ebiten.Image, p vec, size float32) {
 	}
 	h := size * focal / z
 	drawScaled(screen, img, sx, sy, max(h, 1)/float32(img.Bounds().Dy()), false)
-}
-
-// imagePuffDot is the color of a far billboard.
-func imagePuffDot(img *ebiten.Image) *ebiten.Image {
-	if img == imageCloud {
-		return colorWhite
-	}
-	return colorDark
 }
 
 func (g *Game) drawShip(screen *ebiten.Image, s *ship) {
@@ -368,16 +374,16 @@ func (g *Game) drawShip(screen *ebiten.Image, s *ship) {
 		return
 	}
 	if s.sink == 0 && s.speed > 1 {
-		g.drawFlat(screen, imageWake, s.pos.sub(h.mul(t.length*1.2)), h.mul(t.length*1.4), side.mul(t.beam*3))
+		g.drawFlat(screen, g.art.wake, s.pos.sub(h.mul(t.length*1.2)), h.mul(t.length*1.4), side.mul(t.beam*3))
 	}
 	up := vec{0, 0, 1}
 	hull := s.pos.add(up.mul(t.freeboard/2 - sink))
-	g.drawFlat(screen, imageHull, hull, h.mul(t.length), up.mul(-t.freeboard))
+	g.drawFlat(screen, g.art.hull, hull, h.mul(t.length), up.mul(-t.freeboard))
 	if s.sink == 0 {
-		g.drawFlat(screen, imageDeck[s.kind], s.pos.add(up.mul(t.freeboard)), h.mul(t.length), side.mul(t.beam))
+		g.drawFlat(screen, g.art.deck[s.kind], s.pos.add(up.mul(t.freeboard)), h.mul(t.length), side.mul(t.beam))
 	}
 	upper := t.height - t.freeboard
-	g.drawFlat(screen, imageUpper[s.kind], s.pos.add(up.mul(t.freeboard+upper/2-sink)), h.mul(t.length), up.mul(-upper))
+	g.drawFlat(screen, g.art.upper[s.kind], s.pos.add(up.mul(t.freeboard+upper/2-sink)), h.mul(t.length), up.mul(-upper))
 }
 
 func (g *Game) drawPlane(screen *ebiten.Image, q *plane) {
@@ -393,9 +399,9 @@ func (g *Game) drawPlane(screen *ebiten.Image, q *plane) {
 		}
 		return
 	}
-	img := &imageFighter
+	img := &g.art.fighter
 	if q.kind == bomber {
-		img = &imageBomber
+		img = &g.art.bomber
 	}
 	r := q.right()
 	g.drawFlat(screen, img[0], q.pos, q.f.mul(t.length), r.mul(t.span))
@@ -414,23 +420,23 @@ func (g *Game) drawShots(screen *ebiten.Image) {
 		if b.enemy {
 			c = colorEnemyT
 		}
-		for _, back := range [2]float32{0, 0.015} {
+		for _, back := range [3]float32{0, 0.01, 0.02} {
 			sx, sy, z := v.project(b.pos.sub(b.vel.mul(back)))
 			if onScreen(sx, sy, z) {
-				fillRect(screen, c, int(sx), int(sy), 1, 1)
+				fillRect(screen, c, int(sx), int(sy), 2, 2)
 			}
 		}
 	}
 	if g.bomb.alive {
 		if sx, sy, z := v.project(g.bomb.pos); onScreen(sx, sy, z) {
-			fillRect(screen, colorDark, int(sx), int(sy), 2, 2)
+			fillRect(screen, colorDark, int(sx)-1, int(sy)-1, 3, 3)
 		}
 	}
 	if g.torp.alive {
 		for k := range 6 {
 			p := g.torp.pos.sub(g.torp.dir.mul(float32(k) * 12))
 			if sx, sy, z := v.project(p); onScreen(sx, sy, z) {
-				fillRect(screen, colorCap, int(sx), int(sy), 1, 1)
+				fillRect(screen, colorCap, int(sx), int(sy), 2, 1)
 			}
 		}
 	}
@@ -438,15 +444,17 @@ func (g *Game) drawShots(screen *ebiten.Image) {
 
 // drawSight draws the gunsight or the bombsight at the center.
 func (g *Game) drawSight(screen *ebiten.Image) {
-	fillRect(screen, colorSight, cx-6, cy, 4, 1)
-	fillRect(screen, colorSight, cx+3, cy, 4, 1)
-	fillRect(screen, colorSight, cx, cy-6, 1, 4)
-	fillRect(screen, colorSight, cx, cy+3, 1, 4)
+	fillRect(screen, colorSight, cx-12, cy, 8, 1)
+	fillRect(screen, colorSight, cx+5, cy, 8, 1)
+	fillRect(screen, colorSight, cx, cy-12, 1, 8)
+	fillRect(screen, colorSight, cx, cy+5, 1, 8)
+	fillRect(screen, colorSight, cx, cy, 1, 1)
 	if g.player().kind == zero {
-		// A ring of about two degrees.
-		for _, d := range [...][2]int{{-4, -1}, {-4, 0}, {-4, 1}, {4, -1}, {4, 0}, {4, 1}, {-1, -4}, {0, -4}, {1, -4}, {-1, 4}, {0, 4}, {1, 4},
-			{-3, -3}, {3, -3}, {-3, 3}, {3, 3}} {
-			fillRect(screen, colorSight, cx+d[0], cy+d[1], 1, 1)
+		// A ring of about two degrees, drawn as eight short arcs.
+		for _, d := range [...][4]int{{-8, -2, 1, 5}, {8, -2, 1, 5}, {-2, -8, 5, 1}, {-2, 8, 5, 1},
+			{-6, -6, 2, 1}, {5, -6, 2, 1}, {-6, 6, 2, 1}, {5, 6, 2, 1},
+			{-7, -5, 1, 1}, {7, -5, 1, 1}, {-7, 5, 1, 1}, {7, 5, 1, 1}} {
+			fillRect(screen, colorSight, cx+d[0], cy+d[1], d[2], d[3])
 		}
 	}
 }
@@ -454,8 +462,8 @@ func (g *Game) drawSight(screen *ebiten.Image) {
 // brackets marks a point with four corners.
 func brackets(screen, c *ebiten.Image, x, y, r int) {
 	for _, d := range [4][2]int{{-1, -1}, {1, -1}, {-1, 1}, {1, 1}} {
-		fillRect(screen, c, x+d[0]*r-max(d[0], 0), y+d[1]*r, 2, 1)
-		fillRect(screen, c, x+d[0]*r, y+d[1]*r-max(d[1], 0), 1, 2)
+		fillRect(screen, c, x+d[0]*r-max(d[0], 0)*3, y+d[1]*r, 4, 1)
+		fillRect(screen, c, x+d[0]*r, y+d[1]*r-max(d[1], 0)*3, 1, 4)
 	}
 }
 
@@ -471,16 +479,17 @@ func (g *Game) edgeArrow(screen, c *ebiten.Image, p vec) {
 		}
 	}
 	// Keep clear of the cowling at the bottom.
-	down := float32(cy - 4)
+	down := float32(cy - 10)
 	if y > 0 {
-		down = viewHeight - 13 - cy
+		down = viewHeight - cowlH - 8 - cy
 	}
-	m := max(abs(x)/(cx-4), abs(y)/down)
+	m := max(abs(x)/(cx-8), abs(y)/down)
 	if m == 0 {
 		return
 	}
 	ax, ay := int(cx+x/m), int(cy+y/m)
-	fillRect(screen, c, ax-1, ay-1, 3, 3)
+	fillRect(screen, colorDark, ax-3, ay-3, 7, 7)
+	fillRect(screen, c, ax-2, ay-2, 5, 5)
 	fillRect(screen, colorDark, ax, ay, 1, 1)
 }
 
@@ -499,7 +508,7 @@ func (g *Game) drawMarkers(screen *ebiten.Image) {
 			if i != g.enemy {
 				c = colorEnemyT
 			}
-			brackets(screen, c, int(sx), int(sy), 4)
+			brackets(screen, c, int(sx), int(sy), 8)
 		}
 	}
 	if g.enemy >= 0 {
@@ -512,8 +521,8 @@ func (g *Game) drawMarkers(screen *ebiten.Image) {
 				tof := d / (bulletSpeed + p.v)
 				aim := q.pos.add(q.f.mul(q.v * tof)).add(vec{0, 0, gravity * tof * tof / 2})
 				if sx, sy, z := v.project(aim); onScreen(sx, sy, z) {
-					fillRect(screen, colorYellow, int(sx)-1, int(sy), 3, 1)
-					fillRect(screen, colorYellow, int(sx), int(sy)-1, 1, 3)
+					fillRect(screen, colorYellow, int(sx)-3, int(sy), 7, 1)
+					fillRect(screen, colorYellow, int(sx), int(sy)-3, 1, 7)
 				}
 			}
 		}
@@ -527,7 +536,7 @@ func (g *Game) drawMarkers(screen *ebiten.Image) {
 	}
 	s := &g.ships[g.target]
 	if sx, sy, z := v.project(s.pos); onScreen(sx, sy, z) {
-		brackets(screen, colorYellow, int(sx), int(sy), 5)
+		brackets(screen, colorYellow, int(sx), int(sy), 10)
 	}
 	g.edgeArrow(screen, colorYellow, s.pos)
 	if g.weapons == 0 {
@@ -537,15 +546,15 @@ func (g *Game) drawMarkers(screen *ebiten.Image) {
 	case val:
 		if p.f.z < -0.3 {
 			if sx, sy, z := v.project(g.bombImpact()); onScreen(sx, sy, z) {
-				fillRect(screen, colorYellow, int(sx)-2, int(sy), 5, 1)
-				fillRect(screen, colorYellow, int(sx), int(sy)-2, 1, 5)
+				fillRect(screen, colorYellow, int(sx)-5, int(sy), 11, 1)
+				fillRect(screen, colorYellow, int(sx), int(sy)-5, 1, 11)
 			}
 		}
 	case kate:
 		if aim, ok := g.lead(g.target); ok {
 			if sx, sy, z := v.project(aim); onScreen(sx, sy, z) {
-				fillRect(screen, colorYellow, int(sx)-1, int(sy)-3, 3, 1)
-				fillRect(screen, colorYellow, int(sx), int(sy)-5, 1, 5)
+				fillRect(screen, colorYellow, int(sx)-3, int(sy)-6, 7, 1)
+				fillRect(screen, colorYellow, int(sx), int(sy)-10, 1, 10)
 			}
 		}
 	}
@@ -554,123 +563,125 @@ func (g *Game) drawMarkers(screen *ebiten.Image) {
 func (g *Game) drawPanel(screen *ebiten.Image) {
 	p := g.player()
 	fillRect(screen, colorPanel, 0, viewHeight, ScreenWidth, ScreenHeight-viewHeight)
-	fillRect(screen, colorEdge, 0, viewHeight, ScreenWidth, 1)
+	fillRect(screen, colorEdge, 0, viewHeight, ScreenWidth, 2)
 	if g.mode == modeSelect {
 		return
 	}
+	const row1, row2, row3 = viewHeight + 6, viewHeight + 20, viewHeight + 36
 	kmh := int(p.v * 3.6)
 	sc := textWhite
 	if p.v > planeTypes[p.kind].vne {
 		sc = textRed
 	}
-	buf.reset().str("SPD").draw(screen, 3, 97, textGray)
-	buf.reset().num(kmh).draw(screen, -35, 97, sc)
+	text.Reset().Str("SPD").Draw(screen, 6, row1, 1, textGray)
+	text.Reset().Num(kmh).Right(screen, 70, row1, 1, sc)
 	ac := textWhite
 	if p.pos.z < 100 {
 		ac = textAmber
 	}
-	buf.reset().str("ALT").draw(screen, 40, 97, textGray)
-	buf.reset().num(int(max(p.pos.z, 0))).draw(screen, -76, 97, ac)
-	buf.reset().str("HDG").draw(screen, 82, 97, textGray)
+	text.Reset().Str("ALT").Draw(screen, 82, row1, 1, textGray)
+	text.Reset().Num(int(max(p.pos.z, 0))).Right(screen, 152, row1, 1, ac)
+	text.Reset().Str("HDG").Draw(screen, 166, row1, 1, textGray)
 	hdg := int(bearingOf(p.f)*57.3+0.5) % 360
-	buf.reset().pad(hdg, 3).draw(screen, 98, 97, textWhite)
+	text.Reset().Pad(hdg, 3).Right(screen, 234, row1, 1, textWhite)
 
 	switch p.kind {
 	case zero:
-		buf.reset().str("7.7").draw(screen, 3, 105, textGray)
-		buf.reset().num(g.ammo).draw(screen, 18, 105, textWhite)
-		buf.reset().str("20MM").draw(screen, 40, 105, textGray)
-		buf.reset().num(g.cannon).draw(screen, 58, 105, textWhite)
+		text.Reset().Str("7.7MM").Draw(screen, 6, row2, 1, textGray)
+		text.Reset().Num(g.ammo).Draw(screen, 42, row2, 1, textWhite)
+		text.Reset().Str("20MM").Draw(screen, 82, row2, 1, textGray)
+		text.Reset().Num(g.cannon).Draw(screen, 112, row2, 1, textWhite)
 	case val:
-		buf.reset().str("BOMB").draw(screen, 3, 105, textGray)
-		buf.reset().num(g.weapons).draw(screen, 22, 105, textWhite)
+		text.Reset().Str("BOMB").Draw(screen, 6, row2, 1, textGray)
+		text.Reset().Num(g.weapons).Draw(screen, 36, row2, 1, textWhite)
 		if p.brakes {
-			buf.reset().str("BRAKE").draw(screen, 30, 105, textGreen)
+			text.Reset().Str("BRAKES").Draw(screen, 60, row2, 1, textGreen)
 		}
 	case kate:
-		buf.reset().str("TORP").draw(screen, 3, 105, textGray)
-		buf.reset().num(g.weapons).draw(screen, 22, 105, textWhite)
+		text.Reset().Str("TORP").Draw(screen, 6, row2, 1, textGray)
+		text.Reset().Num(g.weapons).Draw(screen, 36, row2, 1, textWhite)
 		if p.throttle < 1 {
-			buf.reset().str("THR LOW").draw(screen, 30, 105, textGreen)
+			text.Reset().Str("THR LOW").Draw(screen, 56, row2, 1, textGreen)
 		}
 		if g.weapons > 0 {
 			switch {
 			case g.torpedoOK():
-				buf.reset().str("OK").draw(screen, 62, 105, textGreen)
+				text.Reset().Str("OK").Draw(screen, 112, row2, 1, textGreen)
 			case p.pos.z > torpMaxAlt:
-				buf.reset().str("HIGH").draw(screen, 62, 105, textRed)
+				text.Reset().Str("HIGH").Draw(screen, 112, row2, 1, textRed)
 			case p.v*3.6 > torpMaxKmh:
-				buf.reset().str("FAST").draw(screen, 62, 105, textRed)
+				text.Reset().Str("FAST").Draw(screen, 112, row2, 1, textRed)
 			default:
-				buf.reset().str("LEVEL").draw(screen, 62, 105, textRed)
+				text.Reset().Str("LEVEL").Draw(screen, 112, row2, 1, textRed)
 			}
 		}
 	}
 	if g.mission != missionFighter && g.target >= 0 {
 		d := g.ships[g.target].pos.sub(p.pos.flat()).length()
-		buf.reset().num(int(d)).str("M").draw(screen, -117, 105, textYellow)
+		text.Reset().Num(int(d)).Str("M").Right(screen, 234, row2, 1, textYellow)
 	}
 	// Damage left, the score, and the raid or the sortie.
-	fillRect(screen, colorBar, 3, 113, 30, 5)
+	fillRect(screen, colorBar, 6, row3, 60, 8)
 	hc := colorGreen
 	if p.hp < 40 {
 		hc = colorRed
 	}
-	fillRect(screen, hc, 3, 113, max(p.hp, 0)*30/100, 5)
-	buf.reset().num(g.score).draw(screen, -76, 113, textYellow)
+	fillRect(screen, hc, 6, row3, max(p.hp, 0)*60/100, 8)
+	text.Reset().Num(g.score).Right(screen, 152, row3, 1, textYellow)
 	if g.mission == missionFighter {
-		buf.reset().str("CV").draw(screen, 82, 113, textGray)
+		text.Reset().Str("CV").Draw(screen, 166, row3, 1, textGray)
 		for i := range 3 {
 			c := colorBar
 			if i < g.ships[0].hp {
 				c = colorGreen
 			}
-			fillRect(screen, c, 92+i*5, 113, 4, 5)
+			fillRect(screen, c, 186+i*10, row3, 8, 8)
 		}
 	} else {
-		buf.reset().num(g.sortie).str("/").num(sorties).draw(screen, -117, 113, textWhite)
+		text.Reset().Num(g.sortie).Str("/").Num(sorties).Right(screen, 234, row3, 1, textWhite)
 	}
 }
 
 func (g *Game) drawOverlay(screen *ebiten.Image) {
+	const mid = ScreenWidth / 2
 	switch g.mode {
 	case modeSelect:
 		g.drawSelect(screen)
 		return
 	case modeDebrief:
-		box(screen, 10, 16, 100, 58)
-		buf.reset().str("SORTIE ").num(g.sortie).str(" OF ").num(sorties).draw(screen, 30, 22, textWhite)
+		box(screen, 20, 32, 200, 116)
+		text.Reset().Str("SORTIE ").Num(g.sortie).Str(" OF ").Num(sorties).Center(screen, mid, 42, 1, textWhite)
 		r := g.lastResult
 		if r == "" {
 			r = "NO RELEASE"
 		}
-		buf.reset().str(r).center(screen, 36, textYellow)
-		buf.reset().str("SCORE ").num(g.score).center(screen, 48, textWhite)
+		text.Reset().Str(r).Center(screen, mid, 66, 2, textYellow)
+		text.Reset().Str("SCORE ").Num(g.score).Center(screen, mid, 96, 1, textWhite)
 		if g.modeTicks > 45 && g.modeTicks/30%2 == 0 {
-			ebitenutil.DebugPrintAt(screen, "PRESS A", 39, 56)
+			text.Reset().Str("PRESS A").Center(screen, mid, 120, 2, textGreen)
 		}
 		return
 	case modeResult:
-		box(screen, 10, 16, 100, 58)
-		buf.reset().str(g.outcome).center(screen, 24, textYellow)
-		buf.reset().str("SCORE").center(screen, 36, textGray)
-		buf.reset().num(g.score).center2(screen, 44, textWhite)
+		box(screen, 20, 32, 200, 116)
+		text.Reset().Str(g.outcome).Center(screen, mid, 42, 2, textYellow)
+		text.Reset().Str("SCORE").Center(screen, mid, 68, 1, textGray)
+		text.Reset().Num(g.score).Center(screen, mid, 80, 3, textWhite)
 		if g.mission != missionFighter {
-			buf.reset().str("PLANES LOST ").num(g.lost).center(screen, 56, textGray)
+			text.Reset().Str("PLANES LOST ").Num(g.lost).Center(screen, mid, 108, 1, textGray)
 		}
 		if g.modeTicks > 60 && g.modeTicks/30%2 == 0 {
-			ebitenutil.DebugPrintAt(screen, "PRESS A", 39, 62)
+			text.Reset().Str("PRESS A").Center(screen, mid, 124, 2, textGreen)
 		}
 		return
 	}
 	if g.messageTime > 0 && g.message != msgNone && g.messageTime%30 < 22 {
-		msg := messages[g.message]
 		if g.message == msgWave {
-			buf.reset().str("RAID ").num(g.wave).str(" OF ").num(waves).center(screen, 18, textRed)
+			text.Reset().Str("RAID ").Num(g.wave).Str(" OF ").Num(waves).Shade(textShadow).Center(screen, mid, 38, 1, textRed)
 		}
-		w := len(msg)*6 + 6
-		box(screen, (ScreenWidth-w)/2-1, 4, w, 10)
-		ebitenutil.DebugPrintAt(screen, msg, (ScreenWidth-len(msg)*6)/2+2, 1)
+		text.Reset().Str(messages[g.message])
+		w := text.Width(2) + 16
+		box(screen, (ScreenWidth-w)/2, 8, w, 22)
+		text.Center(screen, mid, 12, 2, textWhite)
 	}
 }
 
@@ -683,128 +694,54 @@ var missionLines = [missions][2]string{
 var missionNames = [missions]string{"FIGHTER", "DIVE BOMB", "TORPEDO"}
 
 func (g *Game) drawSelect(screen *ebiten.Image) {
-	box(screen, 8, 6, 104, 84)
-	ebitenutil.DebugPrintAt(screen, "IKATEN AIR", 30, 3)
+	const mid = ScreenWidth / 2
+	box(screen, 16, 12, 208, 168)
+	text.Reset().Str("IKATEN AIR").Shade(colorShade).Center(screen, mid, 20, 3, textYellow)
 	for i, name := range missionNames {
-		y := 20 + i*11
+		y := 52 + i*22
+		c := textGray
 		if i == g.cursor {
-			fillRect(screen, colorBoxHi, 10, y-1, 100, 10)
+			fillRect(screen, colorBoxHi, 20, y-4, 200, 20)
 			if g.ticks/20%2 == 0 {
-				ebitenutil.DebugPrintAt(screen, ">", 14, y-3)
+				text.Reset().Str(">").Draw(screen, 30, y, 2, textYellow)
 			}
+			c = textWhite
 		}
-		ebitenutil.DebugPrintAt(screen, name, 24, y-3)
+		text.Reset().Str(name).Draw(screen, 52, y, 2, c)
 	}
 	l := &missionLines[g.cursor]
-	buf.reset().str(l[0]).center(screen, 56, textYellow)
-	buf.reset().str(l[1]).center(screen, 63, textWhite)
+	text.Reset().Str(l[0]).Center(screen, mid, 124, 1, textYellow)
+	text.Reset().Str(l[1]).Center(screen, mid, 136, 1, textWhite)
 	stick := "B: STICK UP = DIVE"
 	if g.climbUp {
 		stick = "B: STICK UP = CLIMB"
 	}
-	buf.reset().str(stick).center(screen, 75, textGray)
-	buf.reset().str("A: START").center(screen, 82, textGray)
+	text.Reset().Str(stick).Center(screen, mid, 154, 1, textGray)
+	text.Reset().Str("A: START").Center(screen, mid, 166, 1, textGray)
 	// The instruments show the controls.
-	buf.reset().str("ARROWS FLY").draw(screen, 3, 99, textGray)
+	text.Reset().Str("ARROWS FLY").Draw(screen, 6, viewHeight+10, 1, textGray)
 	switch g.cursor {
 	case int(missionFighter):
-		buf.reset().str("A 7.7MM  B 20MM CANNON").draw(screen, 3, 107, textWhite)
+		text.Reset().Str("A: 7.7MM   B: 20MM CANNON").Draw(screen, 6, viewHeight+28, 1, textWhite)
 	case int(missionDive):
-		buf.reset().str("A BOMB  B DIVE BRAKES").draw(screen, 3, 107, textWhite)
+		text.Reset().Str("A: BOMB   B: DIVE BRAKES").Draw(screen, 6, viewHeight+28, 1, textWhite)
 	case int(missionTorpedo):
-		buf.reset().str("A TORPEDO  B THROTTLE").draw(screen, 3, 107, textWhite)
+		text.Reset().Str("A: TORPEDO   B: THROTTLE").Draw(screen, 6, viewHeight+28, 1, textWhite)
 	}
 }
 
+var colorShade = color.RGBA{60, 70, 90, 255}
+
+// box is a dark panel with a two-tone frame, drawn side by side rather than
+// one over another.
 func box(screen *ebiten.Image, x, y, w, h int) {
-	fillRect(screen, colorBoxHi, x-1, y-1, w+2, h+2)
+	fillRect(screen, colorBoxLit, x-2, y-2, w+3, 1)
+	fillRect(screen, colorBoxHi, x+w+1, y-2, 1, 1)
+	fillRect(screen, colorBoxHi, x-2, y-1, w+4, 1)
+	fillRect(screen, colorBoxHi, x-2, y, 2, h)
+	fillRect(screen, colorBoxHi, x+w, y, 2, h)
+	fillRect(screen, colorBoxHi, x-2, y+h, w+4, 2)
 	fillRect(screen, colorBox, x, y, w, h)
-}
-
-// text builds a line of the 3x5 font in a fixed buffer, so that drawing
-// numbers makes no strings and does not allocate.
-type text struct {
-	b [32]byte
-	n int
-}
-
-var buf text
-
-func (t *text) reset() *text { t.n = 0; return t }
-
-func (t *text) str(s string) *text {
-	for i := range len(s) {
-		if t.n < len(t.b) {
-			t.b[t.n] = s[i]
-			t.n++
-		}
-	}
-	return t
-}
-
-func (t *text) num(n int) *text {
-	if n < 0 {
-		t.str("-")
-		n = -n
-	}
-	var d [10]byte
-	i := len(d)
-	for {
-		i--
-		d[i] = byte('0' + n%10)
-		n /= 10
-		if n == 0 {
-			break
-		}
-	}
-	for ; i < len(d); i++ {
-		t.b[t.n] = d[i]
-		t.n++
-	}
-	return t
-}
-
-// pad writes n with leading zeros to the given width.
-func (t *text) pad(n, width int) *text {
-	for w, m := 1, 10; w < width; w, m = w+1, m*10 {
-		if n < m {
-			t.str("0")
-		}
-	}
-	return t.num(n)
-}
-
-// draw draws the line with its left edge at x, or its right edge at -x.
-func (t *text) draw(screen *ebiten.Image, x, y int, c color.RGBA) {
-	if x < 0 {
-		x = -x - t.n*4 + 1
-	}
-	drawText(screen, t.b[:t.n], x, y, 1, c)
-}
-
-func (t *text) center(screen *ebiten.Image, y int, c color.RGBA) {
-	drawText(screen, t.b[:t.n], (ScreenWidth-t.n*4)/2, y, 1, c)
-}
-
-func (t *text) center2(screen *ebiten.Image, y int, c color.RGBA) {
-	drawText(screen, t.b[:t.n], (ScreenWidth-t.n*8)/2, y, 2, c)
-}
-
-// drawText draws text in the 3x5 font at the given scale and color.
-func drawText(screen *ebiten.Image, text []byte, x, y, scale int, c color.RGBA) {
-	var op ebiten.DrawImageOptions
-	for i, ch := range text {
-		img := imageGlyph[ch]
-		if img == nil {
-			continue
-		}
-		op.GeoM.Reset()
-		op.GeoM.Scale(float64(scale), float64(scale))
-		op.GeoM.Translate(float64(x+i*4*scale), float64(y))
-		op.ColorScale.Reset()
-		op.ColorScale.Scale(float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, 1)
-		screen.DrawImage(img, &op)
-	}
 }
 
 func drawAt(screen, img *ebiten.Image, x, y int) {

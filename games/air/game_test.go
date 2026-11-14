@@ -579,3 +579,30 @@ func TestBomberMissionsWinnable(t *testing.T) {
 		}
 	}
 }
+
+// Drawing a frame allocates nothing: on the menu, in each mission, after a
+// sortie and at the end.
+func TestDrawAllocs(t *testing.T) {
+	screen := ebiten.NewImage(ScreenWidth, ScreenHeight)
+	check := func(name string, g *Game) {
+		t.Helper()
+		g.Draw(screen)
+		if n := testing.AllocsPerRun(5, func() { g.ticks++; g.Draw(screen) }); n != 0 {
+			t.Errorf("%s: %v allocations", name, n)
+		}
+	}
+	check("select", NewGame())
+	for _, m := range []mission{missionFighter, missionDive, missionTorpedo} {
+		g := playing(m)
+		for range 30 * tps {
+			g.step(input{})
+		}
+		g.message, g.messageTime = msgWave, 20
+		check("mission", g)
+	}
+	g := playing(missionDive)
+	g.setMode(modeDebrief)
+	check("debrief", g)
+	g.setMode(modeResult)
+	check("result", g)
+}

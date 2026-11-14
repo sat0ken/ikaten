@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	ScreenWidth  = 120
-	ScreenHeight = 120
+	ScreenWidth  = 240
+	ScreenHeight = 240
 
 	maxPlanes  = 10
 	maxShips   = 6
@@ -166,6 +166,8 @@ var messages = [...]string{"", "SHOT DOWN!", "HIT!", "SUNK!", "MISSED", "TORPEDO
 	"ENEMY RAID", "CARRIER HIT", "AWAY!", "NO AMMO", "STALL"}
 
 type Game struct {
+	art *sprites
+
 	mode             mode
 	ticks, modeTicks int
 	clock            int // ticks of play, for the enemy pilots
@@ -208,7 +210,7 @@ type Game struct {
 }
 
 func NewGame() *Game {
-	g := &Game{rng: 2463534242, target: -1, enemy: -1}
+	g := &Game{art: newSprites(), rng: 2463534242, target: -1, enemy: -1}
 	g.start(missionFighter)
 	g.mode = modeSelect
 	return g
