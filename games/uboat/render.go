@@ -47,13 +47,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			fillRect(screen, g.art.black, 0, 0, ScreenWidth, ScreenHeight-shown*ScreenHeight/moveTicks)
 		}
 	} else {
-		g.drawSonar(screen)
+		g.drawSonar(screen) // timed as the sky and the sea
 		mark(1)
 		mark(2)
+		mark(3)
 	}
-	mark(3)
-	g.drawHUD(screen)
 	mark(4)
+	g.drawHUD(screen)
+	mark(5)
 }
 
 // shakeOffset jolts the view after a nearby depth charge. It does not use the
@@ -102,9 +103,10 @@ func (g *Game) drawScope(screen *ebiten.Image) {
 	fillRect(screen, a.sea, 0, horizon+oy, ScreenWidth, ScreenHeight-horizon-oy)
 	// The sky and the sea slide with the bearing, the sea faster for depth.
 	shift := int(g.bearing * g.pxPerRad())
+	mark(1)
 	tile(screen, a.clouds, -shift/3+ox, 16+oy)
 	tile(screen, a.waves, -shift+ox, horizon+oy)
-	mark(1)
+	mark(2)
 
 	// Ships far to near, so that near ones cover far ones.
 	n := 0
@@ -157,8 +159,20 @@ func (g *Game) drawScope(screen *ebiten.Image) {
 	if g.mode == modePlay {
 		g.drawReticle(screen)
 	}
-	mark(2)
-	drawAt(screen, a.mask, 0, 0)
+	mark(3)
+	for _, b := range a.frame {
+		if b.piece == nil {
+			break
+		}
+		h := b.y1 - b.y0
+		fillRect(screen, a.black, 0, b.y0, b.black, h)
+		fillRect(screen, a.black, ScreenWidth-b.black, b.y0, b.black, h)
+		drawAt(screen, b.piece, b.black, b.y0)
+		var op ebiten.DrawImageOptions
+		op.GeoM.Scale(-1, 1)
+		op.GeoM.Translate(float64(ScreenWidth-b.black), float64(b.y0))
+		screen.DrawImage(b.piece, &op)
+	}
 }
 
 // tile draws a repeating strip shifted by x.

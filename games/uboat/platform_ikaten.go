@@ -12,13 +12,11 @@ var (
 	wavesData string
 	//go:embed assets/clouds.ika
 	cloudsData string
-	//go:embed assets/mask.ika
-	maskData string
 	//go:embed assets/sonar.ika
 	sonarData string
 )
 
-func loadAssets() (waves, clouds, mask, sonar *ebiten.Image) {
+func loadAssets() (waves, clouds, sonar *ebiten.Image) {
 	load := func(data string) *ebiten.Image {
 		img, err := ebiten.NewImageFromString(data)
 		if err != nil {
@@ -26,5 +24,5 @@ func loadAssets() (waves, clouds, mask, sonar *ebiten.Image) {
 		}
 		return img
 	}
-	return load(wavesData), load(cloudsData), load(maskData), load(sonarData)
+	return load(wavesData), load(cloudsData), load(sonarData)
 }

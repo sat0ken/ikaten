@@ -249,7 +249,6 @@ func TestAssetSizes(t *testing.T) {
 		w, h int
 		got  interface{ Bounds() image.Rectangle }
 	}{
-		{"mask", ScreenWidth, ScreenHeight, a.mask},
 		{"waves", stripWidth, ScreenHeight - horizon, a.waves},
 		{"clouds", stripWidth, a.clouds.Bounds().Dy(), a.clouds},
 		{"sonar", 2*sonarRadius + 1, 2*sonarRadius + 1, a.sonar},

@@ -1,7 +1,9 @@
 package uboat
 
 import (
+	"image"
 	"image/color"
+	"math"
 
 	ebiten "github.com/sat0ken/ikaten"
 )
@@ -140,9 +142,9 @@ const stripWidth = 512 // the sky and sea strips repeat every stripWidth pixels;
 type sprites struct {
 	ship                [kinds]*ebiten.Image
 	fire, smoke, splash *ebiten.Image
-	clouds, waves       *ebiten.Image // in flash, drawn by assets/gen.go
-	mask                *ebiten.Image // black outside the periscope's circle
-	sonar               *ebiten.Image // rings and cross of the sonar plot
+	clouds, waves       *ebiten.Image    // in flash, drawn by assets/gen.go
+	frame               [frameBands]band // black outside the periscope's circle
+	sonar               *ebiten.Image    // rings and cross of the sonar plot
 	sky, sea, black     *ebiten.Image
 	white, yellow, red  *ebiten.Image
 	green, dim, gray    *ebiten.Image
@@ -175,7 +177,8 @@ func newSprites() *sprites {
 	a.fire = sprite(fireArt)
 	a.smoke = sprite(smokeArt)
 	a.splash = sprite(splashArt)
-	a.waves, a.clouds, a.mask, a.sonar = loadAssets()
+	a.waves, a.clouds, a.sonar = loadAssets()
+	a.frame = periscopeFrame()
 	a.sky = pixel(color.RGBA{150, 182, 214, 255}, 1, 1)
 	a.sea = pixel(color.RGBA{40, 70, 108, 255}, 1, 1)
 	a.black = pixel(color.RGBA{0, 0, 0, 255}, 1, 1)
@@ -189,4 +192,72 @@ func newSprites() *sprites {
 	a.contact[tanker] = pixel(color.RGBA{150, 230, 170, 255}, 6, 4)
 	a.contact[destroyer] = pixel(color.RGBA{240, 70, 50, 255}, 5, 5)
 	return a
+}
+
+// The periscope's frame is black outside the circle with a rim just outside
+// it. It used to be one 240x240 image in flash, but flash reads are slow on
+// the badge: drawing it took about 5 ms a frame. Now each band of rows is a
+// black rectangle at each side, plus a narrow piece in RAM for the curve and
+// the rim, drawn as is on the left and flipped on the right.
+const (
+	rimWidth   = 4
+	pieceWidth = 24 // the most the curve's x changes over a band
+	frameBands = 20
+)
+
+type band struct {
+	y0, y1 int // rows y0 to y1-1
+	black  int // the black rectangle's width at each side
+	piece  *ebiten.Image
+}
+
+// periscopeFrame splits the rows into bands, top to bottom.
+func periscopeFrame() [frameBands]band {
+	const outer = scopeRadius + rimWidth
+	// first returns the first x of row y within radius r of the center, or the
+	// center if none is.
+	first := func(y int, r float64) int {
+		for x := range ScreenWidth / 2 {
+			if math.Hypot(float64(x)+.5-scopeX, float64(y)+.5-scopeY) <= r {
+				return x
+			}
+		}
+		return ScreenWidth / 2
+	}
+	pieces := ebiten.NewImage(pieceWidth, ScreenHeight)
+	var bands [frameBands]band
+	n := 0
+	for y := 0; y < ScreenHeight; n++ {
+		if n == frameBands {
+			panic("uboat: too many frame bands")
+		}
+		b := &bands[n]
+		b.y0, b.black = y, first(y, outer)
+		inner := first(y, scopeRadius)
+		for y++; y < ScreenHeight; y++ {
+			lo, hi := min(b.black, first(y, outer)), max(inner, first(y, scopeRadius))
+			if hi-lo > pieceWidth {
+				break
+			}
+			b.black, inner = lo, hi
+		}
+		b.y1 = y
+		for py := b.y0; py < b.y1; py++ {
+			for px := range pieceWidth {
+				dx, dy := float64(b.black+px)+.5-scopeX, float64(py)+.5-scopeY
+				d := math.Hypot(dx, dy)
+				switch {
+				case d > outer:
+					pieces.Set(px, py, color.RGBA{0, 0, 0, 255})
+				case d > scopeRadius:
+					// The light falls from above onto the rim.
+					l := 0.5 - 0.5*dy/d
+					v := uint8(22 + 40*l*(outer-d)/rimWidth)
+					pieces.Set(px, py, color.RGBA{v, v + 4, v + 10, 255})
+				}
+			}
+		}
+		b.piece = pieces.SubImage(image.Rect(0, b.y0, inner-b.black, b.y1)).(*ebiten.Image)
+	}
+	return bands
 }

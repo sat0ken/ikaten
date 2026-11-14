@@ -1,8 +1,8 @@
 //go:build ignore
 
-// gen draws the large uboat images: the sea and sky strips, the periscope's
-// mask and the sonar plot. They go to flash as assets because drawing them at
-// start took about 100 KiB of RAM.
+// gen draws the large uboat images: the sea and sky strips and the sonar
+// plot. They go to flash as assets because drawing them at start took about
+// 100 KiB of RAM.
 // Usage: go run gen.go, then run go generate in games/uboat.
 package main
 
@@ -21,9 +21,6 @@ const (
 	screenWidth  = 240
 	screenHeight = 240
 	horizon      = 116
-	scopeX       = 120.0
-	scopeY       = 120.0
-	scopeRadius  = 108.0
 	sonarRadius  = 104
 	stripWidth   = 512
 )
@@ -107,28 +104,6 @@ func clouds() image.Image {
 	return img
 }
 
-// mask is black outside a circle with a dark rim shaded like a periscope
-// eyepiece, lighter at the top left.
-func mask() image.Image {
-	img := image.NewNRGBA(image.Rect(0, 0, screenWidth, screenHeight))
-	for y := range screenHeight {
-		for x := range screenWidth {
-			dx, dy := float64(x)+.5-scopeX, float64(y)+.5-scopeY
-			d := math.Hypot(dx, dy)
-			switch {
-			case d > scopeRadius+4:
-				img.SetNRGBA(x, y, color.NRGBA{0, 0, 0, 255})
-			case d > scopeRadius:
-				// The light falls from the top left onto the rim.
-				l := 0.5 - 0.5*(dx+dy)/(d*math.Sqrt2)
-				v := uint8(22 + 40*l*(scopeRadius+4-d)/4)
-				img.SetNRGBA(x, y, color.NRGBA{v, v + 4, v + 10, 255})
-			}
-		}
-	}
-	return img
-}
-
 // sonar draws the plot's rim with ticks every 30 degrees, its range rings and
 // a dotted cross.
 func sonar() image.Image {
@@ -154,7 +129,7 @@ func sonar() image.Image {
 }
 
 func main() {
-	for name, img := range map[string]image.Image{"waves.png": waves(), "clouds.png": clouds(), "mask.png": mask(), "sonar.png": sonar()} {
+	for name, img := range map[string]image.Image{"waves.png": waves(), "clouds.png": clouds(), "sonar.png": sonar()} {
 		out, err := os.Create(name)
 		if err != nil {
 			log.Fatal(err)

@@ -41,7 +41,7 @@ func (g *autoplay) Update() error {
 			println("frames=", n, " tps=", int(ebiten.ActualTPS()), " update_us/frame=", (current.Update-g.stats.Update).Microseconds()/int64(n), " draw_us/frame=", (current.Draw-g.stats.Draw).Microseconds()/int64(n), " present_us/frame=", (current.Present-g.stats.Present).Microseconds()/int64(n), " heap=", mem.HeapAlloc, " gc=", mem.NumGC, " longest_gap_us=", g.longestUpdate.Microseconds())
 			// Where Draw's time went, in microseconds a frame.
 			t := uboat.SectionTimes()
-			println("  sea=", t[0].Microseconds()/int64(n), " ships=", t[1].Microseconds()/int64(n), " mask=", t[2].Microseconds()/int64(n), " gauges=", t[3].Microseconds()/int64(n))
+			println("  fill=", t[0].Microseconds()/int64(n), " strips=", t[1].Microseconds()/int64(n), " ships=", t[2].Microseconds()/int64(n), " frame=", t[3].Microseconds()/int64(n), " gauges=", t[4].Microseconds()/int64(n))
 		}
 		g.stats = current
 		g.last = now

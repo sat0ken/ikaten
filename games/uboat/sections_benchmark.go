@@ -4,11 +4,12 @@ package uboat
 
 import "time"
 
-// Sections of Draw, timed in benchmark builds: the sky and the sea (or the
-// sonar), the ships and the reticle, the periscope mask, and the gauges.
+// Sections of Draw, timed in benchmark builds: the sky and the sea filled (or
+// the sonar), the clouds and the waves, the ships and the reticle, the
+// periscope's frame, and the gauges.
 var (
 	sectionStart time.Time
-	sectionTimes [4]time.Duration
+	sectionTimes [5]time.Duration
 )
 
 // mark ends section i-1 and starts section i.
@@ -22,8 +23,8 @@ func mark(i int) {
 
 // SectionTimes returns the time spent in each section of Draw since it was
 // last called.
-func SectionTimes() [4]time.Duration {
+func SectionTimes() [5]time.Duration {
 	t := sectionTimes
-	sectionTimes = [4]time.Duration{}
+	sectionTimes = [5]time.Duration{}
 	return t
 }
