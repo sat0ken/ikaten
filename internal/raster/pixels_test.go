@@ -238,3 +238,53 @@ func TestColumnNearlyMatchesGeneral(t *testing.T) {
 	}
 	t.Logf("%d of %d pixels differ", differing, total)
 }
+
+// Opaque images rotated and scaled with steps under a pixel, from RAM and
+// from flash data aligned to two bytes or not, take affineOpaque. It may
+// differ from the general path only on texel edges.
+func TestAffineOpaqueNearlyMatchesGeneral(t *testing.T) {
+	const w, h = 40, 30
+	pixels := make([]uint16, w*h)
+	raw := make([]byte, 2*w*h+1)
+	for i := range pixels {
+		pixels[i] = uint16(i*7919 + 3)
+	}
+	sources := map[string]View{"ram": {Buffer: &Buffer{Pixels: pixels}, Bounds: image.Rect(0, 0, w, h), Stride: w}}
+	for _, shift := range []int{0, 1} {
+		data := raw[shift : shift+2*w*h]
+		for i, p := range pixels {
+			data[2*i], data[2*i+1] = byte(p), byte(p>>8)
+		}
+		sources[[]string{"flash-aligned", "flash-odd"}[shift]] = View{Buffer: &Buffer{Data: data}, Bounds: image.Rect(0, 0, w, h), Stride: w}
+	}
+	rng := uint32(7)
+	random := func() float32 {
+		rng ^= rng << 13
+		rng ^= rng >> 17
+		rng ^= rng << 5
+		return float32(rng%20000)/10000 - 1
+	}
+	for name, src := range sources {
+		differing, total := 0, 0
+		for range 1000 {
+			// Rows of a floor: magnified, turned any way.
+			o := Options{A: 1 + random()*2, B: random() * 2, C: random() * 2, D: 1 + random()*2,
+				TX: random() * 30, TY: random() * 30, R: 256, G: 256, Blue: 256, Alpha: 256}
+			var got, want View
+			for i, v := range []*View{&got, &want} {
+				*v = View{Buffer: &Buffer{Pixels: make([]uint16, 64*64), Mask: make([]byte, 64*64/8)}, Bounds: image.Rect(0, 0, 64, 64), Stride: 64}
+				draw(*v, src, o, i == 1)
+			}
+			for i := range got.Buffer.Pixels {
+				total++
+				if got.Buffer.Pixels[i] != want.Buffer.Pixels[i] || got.Buffer.Visible(i) != want.Buffer.Visible(i) {
+					differing++
+				}
+			}
+		}
+		if differing*10000 > total {
+			t.Fatalf("%s: %d of %d pixels differ", name, differing, total)
+		}
+		t.Logf("%s: %d of %d pixels differ", name, differing, total)
+	}
+}

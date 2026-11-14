@@ -1,6 +1,9 @@
 package raster
 
-import "math"
+import (
+	"math"
+	"unsafe"
+)
 
 type Blend uint8
 
@@ -303,10 +306,16 @@ func affine(dst, src View, o Options) bool {
 	// clipped area bound them. Past 1e9 the 32.32 fixed point could overflow.
 	fx0, fx1 := float32(x0)+.5-o.TX, float32(x1)-.5-o.TX
 	fy0, fy1 := float32(y0)+.5-o.TY, float32(y1)-.5-o.TY
+	// small reports whether every source coordinate is within 16.16 fixed
+	// point, with room for a pixel's step.
+	small := sw < 16384 && sh < 16384
 	for _, c := range [4][2]float32{{fx0, fy0}, {fx1, fy0}, {fx0, fy1}, {fx1, fy1}} {
 		u, v := ia*c[0]+ib*c[1], ic*c[0]+id*c[1]
 		if u < -1e9 || u > 1e9 || v < -1e9 || v > 1e9 {
 			return false
+		}
+		if u < -16384 || u > 16384 || v < -16384 || v > 16384 {
+			small = false
 		}
 	}
 	const unit = 4294967296.0
@@ -337,6 +346,10 @@ func affine(dst, src View, o Options) bool {
 				dst.Buffer.SetMaskRange(di+lo, hi-lo, true)
 			}
 		}
+		return true
+	}
+	if plain && opaque && small && (ia > -1 && ia < 1 && ic > -1 && ic < 1) {
+		affineOpaque(dst, src, x0, x1, y0, y1, rowX, rowY, stepX, stepY, dx, dy, marking)
 		return true
 	}
 	for y := y0; y < y1; y, rowX, rowY = y+1, rowX+stepX, rowY+stepY {
@@ -410,6 +423,48 @@ func ceilDiv(a, b int64) int64 {
 		q++
 	}
 	return q
+}
+
+// affineOpaque is affine's pixel loop for an opaque source without a color
+// scale, a step of under a source pixel along the row and coordinates within
+// 16.16 fixed point: as a row of a floor or a road. Its 32-bit sums cost
+// less than 32.32 ones on a 32-bit processor; they can drift from the 32.32
+// ones by a 65536th of a pixel a step, so a sample can differ from the
+// general path only within that of a texel's edge. An image in flash is read
+// a pixel at a time where its data is aligned to two bytes.
+func affineOpaque(dst, src View, x0, x1, y0, y1 int, rowX, rowY, stepX, stepY, dx, dy int64, marking bool) {
+	sw, sh := uint32(src.Bounds.Dx()), uint32(src.Bounds.Dy())
+	pixels, mask := dst.Buffer.Pixels, dst.Buffer.Mask
+	data, spix := src.Buffer.Data, src.Buffer.Pixels
+	aligned := data != nil && uintptr(unsafe.Pointer(&data[0]))&1 == 0
+	// Steps rounded to the nearest 65536th, so the drift has no bias.
+	du, dv := int32((dx+1<<15)>>16), int32((dy+1<<15)>>16)
+	n := x1 - x0
+	for y := y0; y < y1; y, rowX, rowY = y+1, rowX+stepX, rowY+stepY {
+		di := dst.Index(x0, y)
+		out := pixels[di : di+n]
+		u, v := int32(rowX>>16), int32(rowY>>16)
+		for i := range out {
+			px, py := uint32(u>>16), uint32(v>>16)
+			u, v = u+du, v+dv
+			if px >= sw || py >= sh {
+				continue
+			}
+			p := src.Offset + int(py)*src.Stride + int(px)
+			switch {
+			case data == nil:
+				out[i] = spix[p]
+			case aligned:
+				out[i] = *(*uint16)(unsafe.Pointer(&data[2*p]))
+			default:
+				out[i] = uint16(data[2*p]) | uint16(data[2*p+1])<<8
+			}
+			if marking {
+				q := di + i
+				mask[q>>3] |= 1 << uint(q&7)
+			}
+		}
+	}
 }
 
 // span returns the destination pixels covering start to start+length, clipped
