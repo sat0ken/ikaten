@@ -37,14 +37,6 @@ cp ../../compat/blocks_platform.go.txt blocks/platform_ebitengine.go
 cp ../../games/blocks/assets/*.png blocks/assets/
 cp ../../compat/blocks_main.go.txt blocksmain/main.go
 GOOS=js GOARCH=wasm go build -mod=mod -o ../blocks-ebitengine.wasm ./blocksmain
-# shooter is written against the Ebitengine API only.
-mkdir -p shooter shootermain
-for f in ../../games/shooter/*.go; do
- sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
-  -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "shooter/$(basename "$f")"
-done
-cp ../../compat/shooter_main.go.txt shootermain/main.go
-GOOS=js GOARCH=wasm go build -mod=mod -o ../shooter-ebitengine.wasm ./shootermain
 # kart also has a course package and swaps its track loading.
 rm -rf kart kartmain
 mkdir -p kart/course kart/assets kartmain
@@ -94,6 +86,16 @@ for f in ../../games/pixtext/*.go; do
  case "$f" in *_test.go) continue;; esac
  sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' "$f" > "pixtext/$(basename "$f")"
 done
+# shooter is written against the Ebitengine API only.
+mkdir -p shooter shootermain
+for f in ../../games/shooter/*.go; do
+ case "$f" in *_test.go) continue;; esac
+ sed -e 's#"github.com/sat0ken/ikaten/games/pixtext"#"ikaten-compat/pixtext"#' \
+  -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+  -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "shooter/$(basename "$f")"
+done
+cp ../../compat/shooter_main.go.txt shootermain/main.go
+GOOS=js GOARCH=wasm go build -mod=mod -o ../shooter-ebitengine.wasm ./shootermain
 # dungeon is written against the Ebitengine API only and uses pixtext.
 rm -rf dungeon dungeonmain
 mkdir -p dungeon dungeonmain

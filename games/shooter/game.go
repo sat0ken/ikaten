@@ -8,14 +8,18 @@ import (
 	"image/color"
 
 	ebiten "github.com/sat0ken/ikaten"
-	"github.com/sat0ken/ikaten/ebitenutil"
+	"github.com/sat0ken/ikaten/games/pixtext"
 	"github.com/sat0ken/ikaten/inpututil"
 )
 
 const (
-	ScreenWidth  = 120
-	ScreenHeight = 120
-	fp           = 16 // positions are in 1/16 pixels
+	ScreenWidth  = 240
+	ScreenHeight = 240
+	// The game plays on a field of 120 by 120 of its own pixels, drawn at
+	// zoom screen pixels each.
+	fieldW, fieldH = 120, 120
+	zoom           = ScreenWidth / fieldW
+	fp             = 16 // positions are in 1/16 of the field's pixels
 
 	maxEnemies = 16
 	maxShots   = 24
@@ -117,6 +121,8 @@ const (
 )
 
 type Game struct {
+	art *sprites
+
 	mode                          mode
 	ticks, modeTicks              int
 	rng                           uint32
@@ -136,9 +142,11 @@ type Game struct {
 }
 
 func NewGame() *Game {
-	g := &Game{rng: 2463534242}
+	// Draw fills the whole screen anyway.
+	ebiten.SetScreenClearedEveryFrame(false)
+	g := &Game{art: newSprites(), rng: 2463534242}
 	for i := range g.stars {
-		g.stars[i] = star{x: g.random(ScreenWidth), y: g.random(ScreenHeight) * fp, layer: i % 3}
+		g.stars[i] = star{x: g.random(fieldW), y: g.random(fieldH) * fp, layer: i % 3}
 	}
 	g.reset()
 	return g
@@ -146,7 +154,7 @@ func NewGame() *Game {
 
 // reset prepares a new game. The high score and the stars stay.
 func (g *Game) reset() {
-	g.px, g.py = ScreenWidth/2*fp, 104*fp
+	g.px, g.py = fieldW/2*fp, 104*fp
 	g.lives, g.bombs, g.power = startLives, startBombs, 1
 	g.invincible, g.respawn, g.fireCool = 0, 0, 0
 	g.score, g.kills = 0, 0
@@ -184,9 +192,9 @@ func (g *Game) Update() error {
 	g.modeTicks++
 	for i := range g.stars {
 		s := &g.stars[i]
-		if s.y += starSpeeds[s.layer]; s.y >= ScreenHeight*fp {
-			s.y -= ScreenHeight * fp
-			s.x = g.random(ScreenWidth)
+		if s.y += starSpeeds[s.layer]; s.y >= fieldH*fp {
+			s.y -= fieldH * fp
+			s.x = g.random(fieldW)
 		}
 	}
 	switch g.mode {
@@ -228,7 +236,7 @@ func (g *Game) updatePlayer() {
 				g.setMode(modeOver)
 				return
 			}
-			g.px, g.py = ScreenWidth/2*fp, 104*fp
+			g.px, g.py = fieldW/2*fp, 104*fp
 			g.invincible = respawnTicks
 		}
 		return
@@ -249,8 +257,8 @@ func (g *Game) updatePlayer() {
 	if ebiten.IsKeyPressed(ebiten.KeyArrowDown) {
 		dy++
 	}
-	g.px = min(max(g.px+dx*playerSpeed, 6*fp), (ScreenWidth-6)*fp)
-	g.py = min(max(g.py+dy*playerSpeed, 14*fp), (ScreenHeight-7)*fp)
+	g.px = min(max(g.px+dx*playerSpeed, 6*fp), (fieldW-6)*fp)
+	g.py = min(max(g.py+dy*playerSpeed, 14*fp), (fieldH-7)*fp)
 	if g.fireCool > 0 {
 		g.fireCool--
 	}
@@ -365,7 +373,7 @@ func (g *Game) updateWaves() {
 		return
 	}
 	if !g.bossSpawned && g.enemyCount() == 0 {
-		g.spawn(boss, ScreenWidth/2)
+		g.spawn(boss, fieldW/2)
 		g.bossSpawned = true
 	}
 }
@@ -382,7 +390,7 @@ func (g *Game) enemyCount() int {
 
 func (g *Game) spawn(k kind, x int) {
 	if k == weaver {
-		x = min(max(x, 26), ScreenWidth-26) // keep the sway on screen
+		x = min(max(x, 26), fieldW-26) // keep the sway on screen
 	}
 	for i := range g.enemies {
 		e := &g.enemies[i]
@@ -443,7 +451,7 @@ func (g *Game) updateEnemies() {
 		case boss:
 			g.updateBoss(e)
 		}
-		if e.y > (ScreenHeight+12)*fp {
+		if e.y > (fieldH+12)*fp {
 			e.alive = false
 		}
 	}
@@ -455,7 +463,7 @@ func (g *Game) updateBoss(e *enemy) {
 		e.age = 0
 		return
 	}
-	e.x = ScreenWidth/2*fp + dirs[e.age/2%len(dirs)].y*34*fp/256
+	e.x = fieldW/2*fp + dirs[e.age/2%len(dirs)].y*34*fp/256
 	if e.age%bossFireTicks != 0 {
 		return
 	}
@@ -507,7 +515,7 @@ func move(ms []mover) {
 		}
 		m.x += m.vx
 		m.y += m.vy
-		if m.x < -4*fp || m.x > (ScreenWidth+4)*fp || m.y < -4*fp || m.y > (ScreenHeight+4)*fp {
+		if m.x < -4*fp || m.x > (fieldW+4)*fp || m.y < -4*fp || m.y > (fieldH+4)*fp {
 			m.alive = false
 		}
 	}
@@ -590,19 +598,38 @@ func (g *Game) die() {
 
 var colorSpace = color.RGBA{6, 6, 20, 255}
 
-func (g *Game) Draw(screen *ebiten.Image) {
-	if g.bombFlash > 0 {
-		v := uint8(6 + g.bombFlash*10)
-		screen.Fill(color.RGBA{v, v, v + 14, 255})
-	} else {
-		screen.Fill(colorSpace)
+var (
+	textWhite  = color.RGBA{240, 244, 250, 255}
+	textGray   = color.RGBA{150, 160, 190, 255}
+	textYellow = color.RGBA{255, 230, 60, 255}
+	textRed    = color.RGBA{255, 80, 70, 255}
+	textCyan   = color.RGBA{80, 220, 255, 255}
+	textShadow = color.RGBA{0, 0, 0, 255}
+)
+
+var text pixtext.Line
+
+// flashColors are the space color while a bomb's flash fades, made once as
+// color.Color: making one each frame would allocate.
+var flashColors [16]color.Color
+
+func init() {
+	flashColors[0] = colorSpace
+	for i := 1; i < len(flashColors); i++ {
+		v := uint8(6 + i*10)
+		flashColors[i] = color.RGBA{v, v, v + 14, 255}
 	}
+}
+
+func (g *Game) Draw(screen *ebiten.Image) {
+	// Filling the whole screen also marks it opaque, which draws faster.
+	screen.Fill(flashColors[min(max(g.bombFlash, 0), len(flashColors)-1)])
 	for _, s := range g.stars {
-		drawAt(screen, imageStar[s.layer], s.x, s.y/fp)
+		drawAt(screen, g.art.star[s.layer], s.x*zoom, s.y*zoom/fp)
 	}
 	for _, it := range g.items {
 		if it.alive {
-			drawCentered(screen, imageItem, it.x, it.y)
+			drawCentered(screen, g.art.item, it.x, it.y)
 		}
 	}
 	for _, e := range g.enemies {
@@ -610,48 +637,48 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			continue
 		}
 		if e.flash > 0 {
-			drawFlashing(screen, imageEnemy[e.kind], e.x, e.y)
+			drawFlashing(screen, g.art.enemy[e.kind], e.x, e.y)
 		} else {
-			drawCentered(screen, imageEnemy[e.kind], e.x, e.y)
+			drawCentered(screen, g.art.enemy[e.kind], e.x, e.y)
 		}
 	}
 	for _, s := range g.shots {
 		if s.alive {
-			drawCentered(screen, imageShot, s.x, s.y)
+			drawCentered(screen, g.art.shot, s.x, s.y)
 		}
 	}
 	if g.mode == modePlay && g.respawn == 0 && (g.invincible == 0 || g.ticks/3%2 == 0) {
-		drawCentered(screen, imagePlayer[g.ticks/4%2], g.px, g.py)
+		drawCentered(screen, g.art.player[g.ticks/4%2], g.px, g.py)
 	}
 	for _, b := range g.bullets {
 		if b.alive {
-			drawCentered(screen, imageBullet, b.x, b.y)
+			drawCentered(screen, g.art.bullet, b.x, b.y)
 		}
 	}
 	for _, b := range g.blasts {
 		if b.alive && b.age >= 0 {
-			drawCentered(screen, imageBlast[b.age/blastTicks], b.x, b.y)
+			drawCentered(screen, g.art.blast[b.age/blastTicks], b.x, b.y)
 		}
 	}
 	g.drawHUD(screen)
+	const mid = ScreenWidth / 2
 	switch g.mode {
 	case modeTitle:
-		ebitenutil.DebugPrintAt(screen, "IKATEN SHOOTER", 18, 26)
-		ebitenutil.DebugPrintAt(screen, "HI", 34, 44)
-		drawNumber(screen, g.hiScore, 6, 50, 49)
-		ebitenutil.DebugPrintAt(screen, "Z:SHOT  X:BOMB", 18, 66)
+		text.Reset().Str("IKATEN").Shade(textShadow).Center(screen, mid, 50, 3, textCyan)
+		text.Reset().Str("SHOOTER").Shade(textShadow).Center(screen, mid, 78, 3, textCyan)
+		text.Reset().Str("HI ").Pad(g.hiScore, 6).Center(screen, mid, 116, 1, textYellow)
+		text.Reset().Str("A: SHOT   B: BOMB").Center(screen, mid, 136, 1, textWhite)
 		if g.modeTicks/30%2 == 0 {
-			ebitenutil.DebugPrintAt(screen, "PRESS Z", 39, 86)
+			text.Reset().Str("PRESS A").Shade(textShadow).Center(screen, mid, 166, 2, textWhite)
 		}
 	case modeOver:
-		ebitenutil.DebugPrintAt(screen, "GAME OVER", 33, 40)
+		text.Reset().Str("GAME OVER").Shade(textShadow).Center(screen, mid, 84, 3, textRed)
 		if g.modeTicks > 60 {
-			ebitenutil.DebugPrintAt(screen, "PRESS Z", 39, 66)
+			text.Reset().Str("PRESS A").Shade(textShadow).Center(screen, mid, 132, 2, textWhite)
 		}
 	case modePlay:
 		if g.waveTick < 0 && g.wave == 0 {
-			ebitenutil.DebugPrintAt(screen, "STAGE", 42, 44)
-			drawNumber(screen, g.level, 2, 76, 49)
+			text.Reset().Str("STAGE ").Num(g.level).Shade(textShadow).Center(screen, mid, 96, 3, textWhite)
 		}
 	}
 }
@@ -660,18 +687,18 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 	if g.mode == modeTitle {
 		return
 	}
-	drawNumber(screen, g.score, 6, 2, 2)
+	text.Reset().Pad(g.score, 6).Shade(textShadow).Draw(screen, 4, 4, 1, textWhite)
 	for i := range max(g.lives-1, 0) {
-		drawAt(screen, imageLife, ScreenWidth-7-i*6, 2)
+		drawAt(screen, g.art.life, ScreenWidth-14-i*12, 3)
 	}
 	for i := range g.bombs {
-		drawAt(screen, imageBomb, 2+i*5, ScreenHeight-6)
+		drawAt(screen, g.art.bomb, 4+i*12, ScreenHeight-13)
 	}
 	for _, e := range g.enemies {
 		if e.alive && e.kind == boss && e.y > 0 {
-			const x, width = 20, 80
-			fillRect(screen, imageBarBG, x, 9, width, 2)
-			fillRect(screen, imageBar, x, 9, max(e.hp, 0)*width/maxHP(boss, g.level), 2)
+			const x, width = 40, 160
+			fillRect(screen, g.art.barBG, x, 16, width, 4)
+			fillRect(screen, g.art.bar, x, 16, max(e.hp, 0)*width/maxHP(boss, g.level), 4)
 		}
 	}
 }
@@ -682,17 +709,22 @@ func drawAt(screen, img *ebiten.Image, x, y int) {
 	screen.DrawImage(img, &op)
 }
 
-// drawCentered draws img centered on a position in 1/16 pixels.
+// toScreen turns a position in 1/16 of the field's pixels into screen
+// pixels.
+func toScreen(v int) int { return v * zoom / fp }
+
+// drawCentered draws img centered on a position in 1/16 of the field's
+// pixels.
 func drawCentered(screen, img *ebiten.Image, x, y int) {
 	b := img.Bounds()
-	drawAt(screen, img, x>>4-b.Dx()/2, y>>4-b.Dy()/2)
+	drawAt(screen, img, toScreen(x)-b.Dx()/2, toScreen(y)-b.Dy()/2)
 }
 
 // drawFlashing brightens a sprite that was just hit.
 func drawFlashing(screen, img *ebiten.Image, x, y int) {
 	b := img.Bounds()
 	var op ebiten.DrawImageOptions
-	op.GeoM.Translate(float64(x>>4-b.Dx()/2), float64(y>>4-b.Dy()/2))
+	op.GeoM.Translate(float64(toScreen(x)-b.Dx()/2), float64(toScreen(y)-b.Dy()/2))
 	op.ColorScale.Scale(2.5, 2.5, 2.5, 1)
 	screen.DrawImage(img, &op)
 }
@@ -706,12 +738,4 @@ func fillRect(screen, pixel *ebiten.Image, x, y, width, height int) {
 	op.GeoM.Scale(float64(width), float64(height))
 	op.GeoM.Translate(float64(x), float64(y))
 	screen.DrawImage(pixel, &op)
-}
-
-// drawNumber draws n with the given number of digits, padded with zeros.
-func drawNumber(screen *ebiten.Image, n, digits, x, y int) {
-	for i := digits - 1; i >= 0; i-- {
-		drawAt(screen, imageDigits[n%10], x+i*4, y)
-		n /= 10
-	}
 }
