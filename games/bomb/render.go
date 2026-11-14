@@ -194,24 +194,24 @@ func (g *Game) drawCell(screen *ebiten.Image, c, r int) {
 	x, y := cellX(c), cellY(r)
 	switch g.grid[r][c] {
 	case wall:
-		drawAt(screen, imageWall, x, y)
+		drawAt(screen, g.art.wall, x, y)
 		return
 	case block:
-		drawAt(screen, imageBlock, x, y)
+		drawAt(screen, g.art.block, x, y)
 		return
 	}
-	drawAt(screen, imageGrass[(r+c)%2], x, y)
+	drawAt(screen, g.art.grass[(r+c)%2], x, y)
 	// The shade of the wall or block above.
 	if r > 0 && g.grid[r-1][c] != floor {
 		fill(screen, shadow, x, y, tile, 4)
 	}
 	if n := g.crumble[r][c]; n > 0 {
-		drawAt(screen, imageCrumble[min(1, (fireTicks-n)*2/fireTicks)], x, y)
+		drawAt(screen, g.art.crumble[min(1, (fireTicks-n)*2/fireTicks)], x, y)
 	} else if g.shown[r][c] {
-		drawAt(screen, imageItem[g.items[r][c]], x, y)
+		drawAt(screen, g.art.item[g.items[r][c]], x, y)
 	}
 	if piece, heat, ok := g.fireShape(c, r); ok {
-		drawAt(screen, imageFire[heat][piece], x, y)
+		drawAt(screen, g.art.fire[heat][piece], x, y)
 	}
 }
 
@@ -231,7 +231,7 @@ func (g *Game) drawBombs(screen *ebiten.Image) {
 			op.GeoM.Translate(tile/2, tile/2)
 		}
 		op.GeoM.Translate(float64(x), float64(y))
-		screen.DrawImage(imageBomb[frame], &op)
+		screen.DrawImage(g.art.bomb[frame], &op)
 	}
 }
 
@@ -263,7 +263,7 @@ func (g *Game) drawGophers(screen *ebiten.Image) {
 				op.GeoM.Translate(-gopherW/2, -gopherH)
 				op.GeoM.Scale(s, s)
 				op.GeoM.Translate(float64(x)+gopherW/2, float64(y)+gopherH)
-				screen.DrawImage(imageFaint[i], &op)
+				screen.DrawImage(g.art.faint[i], &op)
 			}
 			continue
 		}
@@ -278,7 +278,7 @@ func (g *Game) drawGophers(screen *ebiten.Image) {
 		if p.moving {
 			frame = walkFrames[g.ticks/6%4]
 		}
-		img := imageGopher[i][min(int(view), 2)][frame]
+		img := g.art.gopher[i][min(int(view), 2)][frame]
 		var op ebiten.DrawImageOptions
 		if flip {
 			op.GeoM.Scale(-1, 1)
@@ -296,7 +296,7 @@ func (g *Game) drawBars(screen *ebiten.Image) {
 	fill(screen, barLine, 0, arenaY-2, ScreenWidth, 1)
 	for i := range g.gophers {
 		x := 4 + i*44
-		drawAt(screen, imageHead[i], x, 5)
+		drawAt(screen, g.art.head[i], x, 5)
 		for w := range winsToWin {
 			c, rim := winOff, barLine
 			if w < g.gophers[i].wins {
@@ -318,7 +318,7 @@ func (g *Game) drawBars(screen *ebiten.Image) {
 	p := &g.gophers[0]
 	for i, n := range [3]int{p.fire, p.count, p.speed - baseSpeed + 1} {
 		x := 4 + i*46
-		drawAt(screen, imageItem[fireUp+item(i)], x, barY+2)
+		drawAt(screen, g.art.item[fireUp+item(i)], x, barY+2)
 		line.Reset().Str("x").Num(n).Draw(screen, x+21, barY+7, 1, textWhite)
 	}
 	line.Reset().Str("LEVEL ").Num(g.level).Right(screen, ScreenWidth-4, barY+7, 1, textGray)
@@ -347,7 +347,7 @@ func (g *Game) drawOverlay(screen *ebiten.Image) {
 			line.Reset().Str("DRAW").Center(screen, mid, 104, 3, textWhite)
 			break
 		}
-		drawScaled(screen, imageGopher[g.winner][down][g.modeTicks/10%2], 46, 92, 2)
+		drawScaled(screen, g.art.gopher[g.winner][down][g.modeTicks/10%2], 46, 92, 2)
 		if g.winner == 0 {
 			line.Reset().Str("YOU WIN!").Draw(screen, 92, 107, 2, textYellow)
 		} else {
@@ -355,7 +355,7 @@ func (g *Game) drawOverlay(screen *ebiten.Image) {
 		}
 	case modeMatchOver:
 		box(screen, 28, 56, 184, 120)
-		drawScaled(screen, imageGopher[g.champion][down][walkFrames[g.modeTicks/15%4]], mid-27, 62, 3)
+		drawScaled(screen, g.art.gopher[g.champion][down][walkFrames[g.modeTicks/15%4]], mid-27, 62, 3)
 		if g.champion == 0 {
 			line.Reset().Str("CHAMPION!").Center(screen, mid, 134, 2, textYellow)
 			if g.modeTicks > 60 {
@@ -374,7 +374,7 @@ func (g *Game) drawTitle(screen *ebiten.Image) {
 	const mid = ScreenWidth / 2
 	box(screen, 12, 24, 216, 192)
 	line.Reset().Str("GOPHER BOMB").Shade(boxEdge).Center(screen, mid, 34, 3, textYellow)
-	drawScaled(screen, imageGopher[0][down][walkFrames[g.modeTicks/20%4]], mid-27, 66, 3)
+	drawScaled(screen, g.art.gopher[0][down][walkFrames[g.modeTicks/20%4]], mid-27, 66, 3)
 	line.Reset().Str("A: BOMB   B: KICK").Center(screen, mid, 142, 1, textWhite)
 	line.Reset().Str("LAST GOPHER STANDING WINS").Center(screen, mid, 156, 1, textGray)
 	if g.modeTicks/30%2 == 0 {

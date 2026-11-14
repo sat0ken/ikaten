@@ -59,11 +59,6 @@ func TestAutopilotRun(t *testing.T) {
 }
 
 func TestPoints(t *testing.T) {
-	for _, r := range "SABCD" {
-		if imageGlyph[r] == nil {
-			t.Errorf("no glyph for rank %c", r)
-		}
-	}
 	for _, c := range []struct {
 		err  float32
 		want int
@@ -345,4 +340,28 @@ func TestTitleDemoLoops(t *testing.T) {
 	if stops <= len(stations) || g.mode != modeTitle {
 		t.Fatalf("%d stops in 20 minutes", stops)
 	}
+}
+
+// Drawing a frame allocates nothing: on the title, along the line, at a
+// platform, in a station's result and at the end.
+func TestDrawAllocs(t *testing.T) {
+	screen := ebiten.NewImage(ScreenWidth, ScreenHeight)
+	g := NewGame()
+	check := func(name string) {
+		t.Helper()
+		g.Draw(screen)
+		if n := testing.AllocsPerRun(5, func() { g.ticks++; g.Draw(screen) }); n != 0 {
+			t.Errorf("%s: %v allocations", name, n)
+		}
+	}
+	check("title")
+	g.setMode(modePlay)
+	for _, at := range []float32{30, 750, 1220, 2250, 2600} {
+		g.pos, g.v, g.horn = at, 20, 10
+		check("driving")
+	}
+	g.setMode(modeStation)
+	check("station")
+	g.setMode(modeEnd)
+	check("end")
 }

@@ -542,21 +542,23 @@ var looks = [3]look{
 	},
 }
 
-var (
-	imageGopher            [5]*ebiten.Image
-	imageBug, imageSpiky   [2]*ebiten.Image
-	imageMoth, imageGem    [2]*ebiten.Image
-	imageHeart             [2]*ebiten.Image // full and empty
-	imageSquash            *ebiten.Image
-	imageSpike, imageCloud *ebiten.Image
-	imageFarCloud          *ebiten.Image
+// sprites holds a game's images. A Game makes them in NewGame and drops them
+// with it, so that the launcher keeps only the running game's in RAM.
+type sprites struct {
+	gopher       [5]*ebiten.Image
+	bug, spiky   [2]*ebiten.Image
+	moth, gem    [2]*ebiten.Image
+	heart        [2]*ebiten.Image // full and empty
+	squash       *ebiten.Image
+	spike, cloud *ebiten.Image
+	farCloud     *ebiten.Image
 
 	// Each stage's tiles.
-	imageGroundTop [3]*ebiten.Image
-	imageGround    [3][2]*ebiten.Image
-	imageBlock     [3]*ebiten.Image
-	imageDirt      [3]*ebiten.Image
-)
+	groundTop [3]*ebiten.Image
+	ground    [3][2]*ebiten.Image
+	block     [3]*ebiten.Image
+	dirt      [3]*ebiten.Image
+}
 
 func sprite(rows []string, pal map[byte]color.RGBA) *ebiten.Image {
 	img := ebiten.NewImage(len(rows[0]), len(rows))
@@ -588,30 +590,32 @@ func tileSprite(rows []string, letters string, colors []color.RGBA) *ebiten.Imag
 	return img
 }
 
-func init() {
-	for i := range imageGopher {
-		imageGopher[i] = sprite(gopherArt[i], gopherPalette)
+func newSprites() *sprites {
+	a := &sprites{}
+	for i := range a.gopher {
+		a.gopher[i] = sprite(gopherArt[i], gopherPalette)
 	}
 	for f := range 2 {
-		imageBug[f] = sprite(bugArt[f], palette)
-		imageSpiky[f] = sprite(spikyArt[f], palette)
-		imageMoth[f] = sprite(mothArt[f], palette)
-		imageGem[f] = sprite(gemArt[f], palette)
-		imageHeart[f] = sprite(heartArt[f], palette)
+		a.bug[f] = sprite(bugArt[f], palette)
+		a.spiky[f] = sprite(spikyArt[f], palette)
+		a.moth[f] = sprite(mothArt[f], palette)
+		a.gem[f] = sprite(gemArt[f], palette)
+		a.heart[f] = sprite(heartArt[f], palette)
 	}
-	imageSquash = sprite(squashArt, palette)
-	imageSpike = sprite(spikeArt, palette)
-	imageCloud = sprite(cloudArt, palette)
-	imageFarCloud = sprite(farCloudArt, palette)
+	a.squash = sprite(squashArt, palette)
+	a.spike = sprite(spikeArt, palette)
+	a.cloud = sprite(cloudArt, palette)
+	a.farCloud = sprite(farCloudArt, palette)
 	for s := range looks {
 		lk := &looks[s]
-		imageGroundTop[s] = tileSprite(groundTopArt, groundLetters, lk.ground[:])
+		a.groundTop[s] = tileSprite(groundTopArt, groundLetters, lk.ground[:])
 		for v := range 2 {
-			imageGround[s][v] = tileSprite(groundArt[v], groundLetters, lk.ground[:])
+			a.ground[s][v] = tileSprite(groundArt[v], groundLetters, lk.ground[:])
 		}
-		imageBlock[s] = tileSprite(blockArt, blockLetters, lk.block[:])
-		imageDirt[s] = tileSprite(dirtArt, dirtLetters, lk.dirt[:])
+		a.block[s] = tileSprite(blockArt, blockLetters, lk.block[:])
+		a.dirt[s] = tileSprite(dirtArt, dirtLetters, lk.dirt[:])
 	}
+	return a
 }
 
 // solidArt fills an image whose art has no transparent pixel before it is

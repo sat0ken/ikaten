@@ -1,7 +1,6 @@
 package fish
 
 import (
-	"image"
 	"image/color"
 
 	ebiten "github.com/sat0ken/ikaten"
@@ -10,186 +9,264 @@ import (
 // Sprites are pixel art written as strings; '.' is transparent. Fish face
 // right.
 var palette = map[byte]color.RGBA{
+	'B': {30, 70, 110, 255},
+	'E': {30, 100, 50, 255},
+	'F': {120, 150, 130, 255},
+	'G': {80, 120, 90, 255},
+	'H': {180, 64, 48, 255},
 	'K': {16, 18, 22, 255},
-	'w': {200, 210, 220, 255},
+	'M': {70, 52, 30, 255},
+	'N': {100, 76, 48, 255},
+	'O': {40, 60, 70, 255},
+	'P': {236, 200, 210, 255},
+	'Q': {220, 160, 170, 255},
+	'R': {240, 120, 120, 255},
+	'U': {36, 66, 130, 255},
 	'W': {245, 248, 250, 255},
-	'g': {90, 110, 130, 255},
-	'G': {60, 120, 90, 255},
-	'B': {30, 60, 100, 255},
-	'b': {60, 100, 150, 255},
-	'r': {220, 70, 70, 255},
-	'R': {250, 150, 160, 255},
-	'y': {240, 210, 60, 255},
-	'n': {140, 110, 70, 255},
-	'N': {90, 70, 44, 255},
-	'p': {240, 220, 225, 255},
-	'P': {200, 120, 150, 255},
+	'X': {130, 30, 40, 255},
+	'Z': {50, 90, 130, 255},
+	'b': {60, 110, 160, 255},
+	'c': {120, 190, 240, 255},
+	'e': {60, 150, 80, 255},
+	'f': {240, 190, 150, 255},
+	'g': {110, 150, 120, 255},
 	'h': {236, 236, 228, 255},
-	'H': {170, 60, 44, 255},
-	'c': {240, 190, 150, 255},
+	'i': {40, 60, 90, 255},
+	'j': {130, 40, 34, 255},
+	'k': {80, 90, 100, 255},
+	'l': {150, 146, 140, 255},
+	'm': {84, 80, 76, 255},
+	'n': {150, 120, 80, 255},
+	'o': {255, 150, 40, 255},
+	'p': {250, 226, 230, 255},
+	'q': {200, 80, 90, 255},
+	'r': {220, 70, 80, 255},
+	's': {170, 182, 196, 255},
 	'u': {50, 90, 170, 255},
-	'e': {50, 130, 70, 255},
-	'E': {30, 90, 50, 255},
-	'k': {110, 106, 100, 255},
-	'o': {255, 170, 60, 255},
+	'w': {200, 210, 220, 255},
+	'y': {240, 210, 60, 255},
 }
 
 var fishArt = [kinds][]string{
 	aji: {
-		"...ggg....",
-		".ggggggg..",
-		"gwwwwwwwKw",
-		".wwwwwww..",
-		"..w...w...",
+		"F.....................",
+		"FF.....OOOOOOOOOOOO...",
+		"FFFF..OggggGGggggggO..",
+		"..FFFOggggggggggggggO.",
+		"...FsssssssssyyysWKssO",
+		"...FsssskkkkkkkkkkksOO",
+		"..FFFOWWWWWWWWWWWWWWO.",
+		"FFFF..OWWWWWWWWWWWWO..",
+		"FF.....OOOOOOOOOOOO...",
+		"F.....................",
 	},
 	saba: {
-		"G...GGGG....",
-		"GGGBGBGBGG..",
-		"GwwwwwwwwwKw",
-		"G.wwwwwwww..",
-		"......w.....",
+		"Z...........O..O..........",
+		"ZZZ......OOOBOOBOOOOOO....",
+		"ZZZZZ..OOBBKBBBBKBBBBKOO..",
+		"..ZZZZOBBKBBBBKBBBBKBBBBO.",
+		"....ZssssssssssssssssWKssO",
+		"....ZsssbbbbbbbbbbbbbbssOO",
+		"..ZZZZOWWWWWWWWWWWWWWWWWO.",
+		"ZZZZZ..OOWWWWWWWWWWWWWOO..",
+		"ZZZ......OOOOOOWOOOOOO....",
+		"Z..............O..........",
 	},
 	madai: {
-		"....rrr.....",
-		"..rrrrrrr...",
-		"r.rRrRrrrr..",
-		"rrrrrrrrrrKr",
-		"r.rrrrrrrrr.",
-		"..rrrrrrr...",
-		"....r.r.....",
+		"q..........XXXXX..........",
+		"qq......XXXrrrrrXXXX......",
+		"qqq.....XrrrrrrrrrrrX.....",
+		"qqqq..XXrrrrrcrrrrrrrXX...",
+		".qqqqXrrrrcrrrrrrrcrrrrX..",
+		"..qqqrrrrrrrrrrrcrrrrrrX..",
+		"...qRRRRRRRRRRRRRRRWKRRRX.",
+		"....XRRRRRRRcRRRRRRRRRRRX.",
+		"....XRRRRcRRRRRcRRRRRRRRX.",
+		"...qRRRRRRRRRRRRRRRRRRRXX.",
+		"..qqqppppppppppppppppppX..",
+		".qqqqXpppppppppppppppppX..",
+		"qqqq..XXpppppppppppppXX...",
+		"qqq.....XXpppppppppXX.....",
+		"qq........XXXXXXXXX.......",
+		"q.........................",
 	},
 	hirame: {
-		"..nnnnnnnnn...",
-		"nnnNnnnNnnnnK.",
-		"nnnnnNnnnnnnnK",
-		"nnnnnnnnnnnnn.",
-		"..nnnnnnnnn...",
+		"..............................",
+		"......MMMMMMMMMMMMMMMMMMMM....",
+		"...MMMnnnnnnnnnnnnnnnnnnnnMM..",
+		"MMM.MnnnnnnnnnnnNNnnnnnnWKnM..",
+		".MnMnnnnNNnnnnnnnnnnnnnNNnKnM.",
+		".MnnnnnnnnnnnnNNnnnnnnnnnnnnnM",
+		".MnMnnnnnnnnNNnnnnnnNNnnnnnnM.",
+		"MMM.MnnnnnNNnnnnnnnnnnnnnnnM..",
+		"...MMMnnnnnnnnnnnnnnnnnnnnMM..",
+		"......MMMMMMMMMMMMMMMMMMMM....",
 	},
 	ika: {
-		".........pp.",
-		"P.P.ppppppPp",
-		"PPPPPKpppppW",
-		"P.P.ppppppPp",
-		".........pp.",
+		"......................M.....",
+		"......................MM....",
+		"..............MMMM.....MMM..",
+		"MMMMMMMM.MMMMMQQQQMMMMM..MM.",
+		"..MPPpppMQQQQQQQQQQQQQQMM.M.",
+		".MPPPppWKpppppppppppppppM...",
+		"..MPPpppKpppppppppppppppM...",
+		"MMPPPpppMppppppppppppppMM.M.",
+		"..MPPPpM.MMMMMppppMMMMM..MM.",
+		"..MMMMM.......MMMM.....MMM..",
+		"......................MM....",
+		"......................M.....",
 	},
 	tachiuo: {
-		"...wwwwwwwwwwwwwwww.",
-		"wwwwwwwwwwwwwwwwwwKw",
-		"....wwwwwwwwwwwww...",
+		"..........sssssssssssssssssssssssssssssss...",
+		".........swwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwss.",
+		"...sssssswwwwwwwwwwwwwwwwwwwwwwwwwwwwwkKwwws",
+		"...ssssssWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWs",
+		".........sssssWWWWWWWWWWWWWWWWWWWWWWWWWWWss.",
+		"..............sssssssssssssssssssssssssss...",
 	},
 	buri: {
-		"....bbbbbbbb....",
-		"b.bbbbbbbbbbbb..",
-		"bbyyyyyyyyyyyyKb",
-		"b.wwwwwwwwwwww..",
-		"....wwwwwwww....",
+		"O................OO...............",
+		"OOO.........OOOOOBBOOOOOOOOO......",
+		"OyyOO....OOOBBBBBBBBBBBBBBBBOOO...",
+		".OOyyOO.ObbbbbbbbbbbbbbbbbbbbbbO..",
+		"...OOyyOybyybyybyybyybyybyybWKbbO.",
+		".....OWWyyyyyyyyyyyyyyyyyyyyyyWWWO",
+		".....OWWWWWWWWWWWWWWWWWWWWWWWWWWOO",
+		"...OOyyOWWWWWWWWWWWWWWWWWWWWWWWWO.",
+		".OOyyOO.OWWWWWWWWWWWWWWWWWWWWWWO..",
+		"OyyOO....OOOWWWWWWWWWWWWWWWWOOO...",
+		"OOO.........OOOOOOOOOOOOOOOO......",
+		"O.................................",
 	},
 	boot: {
-		"..NNN..",
-		"..NnN..",
-		"..NnN..",
-		"..NnN..",
-		"NNNnN..",
-		"NnnnnN.",
-		"NNNNNNN",
+		"....KKKKKK....",
+		"....KnnnnK....",
+		"....KnnnnK....",
+		"....KnhnhK....",
+		"....KnnnnK....",
+		"....KnhnhK....",
+		"...eKnnnnK....",
+		"..e.KnhnhK....",
+		"..E.KnnnnK....",
+		"KKKKnnnnnnKK..",
+		"KnnnnnnnnnnK..",
+		"KnnnnnnnnnnnK.",
+		"KnnnnnnnnnnnK.",
+		"KKKKKKKKKKKKK.",
 	},
 }
 
 var boatArt = []string{
-	"hhhhhhhhhhhhhhhhhhhhhhhhhh",
-	".hhhhhhhhhhhhhhhhhhhhhhhh.",
-	"..HHHHHHHHHHHHHHHHHHHHHH..",
-	"...HHHHHHHHHHHHHHHHHHHH...",
+	"KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK",
+	"KhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhK",
+	"KHiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiHK",
+	"KKKKHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHKKKK",
+	"....KHiHHHHHHHiHHHHHHHiHHHHHHHiHHHHHHHiHHHHHHHiK....",
+	".....KHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHK.....",
+	"......KjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjK......",
+	".......KjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjK.......",
+	"........KjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjK........",
+	".........KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK.........",
 }
 
 var anglerArt = []string{
-	"..yyy...",
-	".yyyyy..",
-	"..ccc...",
-	"..ccc...",
-	".uuuu...",
-	"uuuuuuc.",
-	".uuuu...",
-	".uu.u...",
-}
-
-var weedArt = []string{
-	".e.",
-	"eE.",
-	".eE",
-	"Ee.",
-	".eE",
-	"eE.",
+	"................",
+	"....KKKKKK......",
+	"....KyyyyK......",
+	"....KyyyyK......",
+	"...KKyfffyKK....",
+	".....KfffK......",
+	".....KffKK......",
+	".....KfffK......",
+	".....KuuK.......",
+	"....KuuuuK......",
+	"...KuuuuuuKKKK..",
+	"...KuuuuuuuKKKK.",
+	"...KuuuuuUK.....",
+	"...KuuuuuUK.....",
+	"...KuuuuuUK.....",
+	"...KuuoooUK.....",
+	"....KuuuuK......",
+	"....KUUKUUK.....",
+	"....KUK.KUK.....",
+	"....KKK.KKK.....",
 }
 
 var rockArt = []string{
-	"..kkk.",
-	".kkkkk",
-	"kkkkkk",
+	"..............",
+	"......KK......",
+	"...KKKlkKKK...",
+	".KKlllkkkkkKK.",
+	".KlllkkkkkkmK.",
+	"KlllkkkkkkmmmK",
+	"KllkkkkkkmmmmK",
+	".KKKKKKKKKKKK.",
 }
 
-var lureArt = []string{"oWK", ".W."}
-
-// glyphs is a 3x5 font for the gauges and the board.
-var glyphs = map[byte][5]string{
-	'0': {"###", "#.#", "#.#", "#.#", "###"},
-	'1': {".#.", "##.", ".#.", ".#.", "###"},
-	'2': {"###", "..#", "###", "#..", "###"},
-	'3': {"###", "..#", "###", "..#", "###"},
-	'4': {"#.#", "#.#", "###", "..#", "..#"},
-	'5': {"###", "#..", "###", "..#", "###"},
-	'6': {"###", "#..", "###", "#.#", "###"},
-	'7': {"###", "..#", "..#", ".#.", ".#."},
-	'8': {"###", "#.#", "###", "#.#", "###"},
-	'9': {"###", "#.#", "###", "..#", "###"},
-	'A': {".#.", "#.#", "###", "#.#", "#.#"},
-	'B': {"##.", "#.#", "##.", "#.#", "##."},
-	'C': {".##", "#..", "#..", "#..", ".##"},
-	'D': {"##.", "#.#", "#.#", "#.#", "##."},
-	'E': {"###", "#..", "##.", "#..", "###"},
-	'F': {"###", "#..", "##.", "#..", "#.."},
-	'G': {".##", "#..", "#.#", "#.#", ".##"},
-	'H': {"#.#", "#.#", "###", "#.#", "#.#"},
-	'I': {"###", ".#.", ".#.", ".#.", "###"},
-	'J': {"..#", "..#", "..#", "#.#", ".#."},
-	'K': {"#.#", "#.#", "##.", "#.#", "#.#"},
-	'L': {"#..", "#..", "#..", "#..", "###"},
-	'M': {"#.#", "###", "###", "#.#", "#.#"},
-	'N': {"##.", "#.#", "#.#", "#.#", "#.#"},
-	'O': {".#.", "#.#", "#.#", "#.#", ".#."},
-	'P': {"##.", "#.#", "##.", "#..", "#.."},
-	'Q': {".#.", "#.#", "#.#", "##.", ".##"},
-	'R': {"##.", "#.#", "##.", "#.#", "#.#"},
-	'S': {".##", "#..", ".#.", "..#", "##."},
-	'T': {"###", ".#.", ".#.", ".#.", ".#."},
-	'U': {"#.#", "#.#", "#.#", "#.#", "###"},
-	'V': {"#.#", "#.#", "#.#", "#.#", ".#."},
-	'W': {"#.#", "#.#", "###", "###", "#.#"},
-	'X': {"#.#", "#.#", ".#.", "#.#", "#.#"},
-	'Y': {"#.#", "#.#", ".#.", ".#.", ".#."},
-	'Z': {"###", "..#", ".#.", "#..", "###"},
-	':': {"...", ".#.", "...", ".#.", "..."},
-	'.': {"...", "...", "...", "...", ".#."},
-	'+': {"...", ".#.", "###", ".#.", "..."},
-	'-': {"...", "...", "###", "...", "..."},
-	'/': {"..#", "..#", ".#.", "#..", "#.."},
-	'!': {".#.", ".#.", ".#.", "...", ".#."},
-	'^': {".#.", "#.#", "...", "...", "..."},
-	'v': {"...", "...", "...", "#.#", ".#."},
-	'>': {"#..", ".#.", "..#", ".#.", "#.."},
-	' ': {"...", "...", "...", "...", "..."},
+var lureArt = []string{
+	"........",
+	".yyyyKWK",
+	"soooooW.",
+	"s.......",
 }
 
-const glyphOrder = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:.+-/!^v> "
+var bubbleArt = []string{
+	"..WW..",
+	".W..W.",
+	"W.W..W",
+	"W....W",
+	".W..W.",
+	"..WW..",
+}
 
-var (
-	imageFish               [kinds]*ebiten.Image
-	imageBoat, imageAngler  *ebiten.Image
-	imageWeed, imageRock    *ebiten.Image
-	imageLure, imageSun     *ebiten.Image
-	imageGlyph              [256]*ebiten.Image
-	imagePixel, imageBubble *ebiten.Image
-)
+var weedArt = [2][]string{
+	{
+		"...ee...",
+		"...eeE..",
+		"....eE..",
+		"...eee..",
+		"..eE....",
+		".eeE....",
+		"...ee...",
+		"....eEe.",
+		"....eE..",
+		"..eee...",
+		"..eE....",
+		"..eEe...",
+		"...ee...",
+		"...eeE..",
+		"....eE..",
+		"...eee..",
+	},
+	{
+		"....ee..",
+		"..eeE...",
+		"..eE....",
+		"..eee...",
+		"...eE...",
+		"...eeE..",
+		"....ee..",
+		"...eEe..",
+		"..eE....",
+		".eee....",
+		"...eE...",
+		"....eEe.",
+		"....ee..",
+		"..eeE...",
+		"..eE....",
+		"..eee...",
+	},
+}
+
+// sprites holds a game's images. A Game makes them in NewGame and drops them
+// with it, so that the launcher keeps only the running game's in RAM.
+type sprites struct {
+	fish         [kinds]*ebiten.Image
+	boat, angler *ebiten.Image
+	weed         [2]*ebiten.Image
+	rock, lure   *ebiten.Image
+	sun, bubble  *ebiten.Image
+}
 
 func sprite(rows []string) *ebiten.Image {
 	img := ebiten.NewImage(len(rows[0]), len(rows))
@@ -203,22 +280,13 @@ func sprite(rows []string) *ebiten.Image {
 	return img
 }
 
-func drawGlyph(img *ebiten.Image, ch byte, x, y int, c color.RGBA) {
-	for gy, row := range glyphs[ch] {
-		for gx := range len(row) {
-			if row[gx] == '#' {
-				img.Set(x+gx, y+gy, c)
-			}
-		}
-	}
-}
-
 // sun is a white disc, tinted by the hour when drawn.
 func sun() *ebiten.Image {
-	img := ebiten.NewImage(9, 9)
-	for y := range 9 {
-		for x := range 9 {
-			if (x-4)*(x-4)+(y-4)*(y-4) <= 17 {
+	const d = 18
+	img := ebiten.NewImage(d, d)
+	for y := range d {
+		for x := range d {
+			if dx, dy := 2*x+1-d, 2*y+1-d; dx*dx+dy*dy <= d*d-4 {
 				img.Set(x, y, color.RGBA{255, 255, 255, 255})
 			}
 		}
@@ -226,25 +294,19 @@ func sun() *ebiten.Image {
 	return img
 }
 
-func init() {
+func newSprites() *sprites {
+	a := &sprites{}
 	for k := range kinds {
-		imageFish[k] = sprite(fishArt[k])
+		a.fish[k] = sprite(fishArt[k])
 	}
-	imageBoat = sprite(boatArt)
-	imageAngler = sprite(anglerArt)
-	imageWeed = sprite(weedArt)
-	imageRock = sprite(rockArt)
-	imageLure = sprite(lureArt)
-	imageSun = sun()
-	imageBubble = sprite([]string{".W.", "W.W", ".W."})
-	imagePixel = ebiten.NewImage(1, 1)
-	imagePixel.Fill(color.RGBA{255, 255, 255, 255})
-	font := ebiten.NewImage(len(glyphOrder)*4, 5)
-	for i := range len(glyphOrder) {
-		drawGlyph(font, glyphOrder[i], i*4, 0, color.RGBA{255, 255, 255, 255})
+	a.boat = sprite(boatArt)
+	a.angler = sprite(anglerArt)
+	for f := range a.weed {
+		a.weed[f] = sprite(weedArt[f])
 	}
-	// SubImage allocates, so the glyphs are cut once here.
-	for i := range len(glyphOrder) {
-		imageGlyph[glyphOrder[i]] = font.SubImage(image.Rect(i*4, 0, i*4+3, 5)).(*ebiten.Image)
-	}
+	a.rock = sprite(rockArt)
+	a.lure = sprite(lureArt)
+	a.bubble = sprite(bubbleArt)
+	a.sun = sun()
+	return a
 }

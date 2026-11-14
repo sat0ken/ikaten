@@ -81,6 +81,8 @@ type enemy struct {
 }
 
 type Game struct {
+	art *sprites
+
 	mode             mode
 	ticks, modeTicks int
 
@@ -110,12 +112,13 @@ type Game struct {
 
 	// The screen the whole of which has been filled, so that it is opaque.
 	filled *ebiten.Image
+	back   *backdrop
 }
 
 func NewGame() *Game {
 	// Draw covers the whole screen anyway.
 	ebiten.SetScreenClearedEveryFrame(false)
-	g := &Game{}
+	g := &Game{art: newSprites(), back: newBackdrop()}
 	g.startStage(0)
 	g.mode = modeTitle
 	return g

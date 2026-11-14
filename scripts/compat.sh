@@ -93,13 +93,21 @@ cp ../../compat/uboat_platform.go.txt uboat/platform_ebitengine.go
 cp ../../games/uboat/assets/*.png uboat/assets/
 cp ../../compat/uboat_main.go.txt uboatmain/main.go
 GOOS=js GOARCH=wasm go build -mod=mod -o ../uboat-ebitengine.wasm ./uboatmain
+# pixtext is the font that the games drawn for 240 by 240 share.
+rm -rf pixtext
+mkdir -p pixtext
+for f in ../../games/pixtext/*.go; do
+ case "$f" in *_test.go) continue;; esac
+ sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' "$f" > "pixtext/$(basename "$f")"
+done
 # train is written against the Ebitengine API only and draws its images in
 # code. Its main is written here.
 rm -rf train trainmain
 mkdir -p train trainmain
 for f in ../../games/train/*.go; do
  case "$f" in *_test.go) continue;; esac
- sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+ sed -e 's#"github.com/sat0ken/ikaten/games/pixtext"#"ikaten-compat/pixtext"#' \
+  -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
   -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "train/$(basename "$f")"
 done
 cat > trainmain/main.go <<'EOF'
@@ -153,7 +161,8 @@ rm -rf fish fishmain
 mkdir -p fish fishmain
 for f in ../../games/fish/*.go; do
  case "$f" in *_test.go) continue;; esac
- sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+ sed -e 's#"github.com/sat0ken/ikaten/games/pixtext"#"ikaten-compat/pixtext"#' \
+  -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
   -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "fish/$(basename "$f")"
 done
 cat > fishmain/main.go <<'EOF'
@@ -175,13 +184,6 @@ func main() {
 }
 EOF
 GOOS=js GOARCH=wasm go build -mod=mod -o ../fish-ebitengine.wasm ./fishmain
-# pixtext is the font that the games drawn for 240 by 240 share.
-rm -rf pixtext
-mkdir -p pixtext
-for f in ../../games/pixtext/*.go; do
- case "$f" in *_test.go) continue;; esac
- sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' "$f" > "pixtext/$(basename "$f")"
-done
 # bomb, like train, air and fish, draws its images in code. Its main is
 # written here.
 rm -rf bomb bombmain

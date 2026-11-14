@@ -146,8 +146,25 @@ func scaled(dst, src View, o Options) bool {
 	pixels, mask, spix, smask, sdata := db.Pixels, db.Mask, sb.Pixels, sb.Mask, sb.Data
 	sopaque := sb.Opaque || smask == nil
 	stride := dst.Stride
+	tinted := o.R != 256 || o.G != 256 || o.Blue != 256
 	// An opaque destination's mask bits are already set.
 	marking := !db.Opaque && mask != nil
+	// The source column of each destination column is the same on every
+	// row, so it is worked out once, without 64-bit sums in the pixel loop.
+	n := x1 - x0
+	var cols []int32
+	if direct && n <= len(columnTable) {
+		cols = columnTable[:n]
+		sx := rowX
+		for i := range cols {
+			if px := int(sx >> 32); px >= 0 && px < w {
+				cols[i] = int32(px)
+			} else {
+				cols[i] = -1
+			}
+			sx += dx
+		}
+	}
 	for y := y0; y < y1; {
 		py := int(sy >> 32)
 		end := y + 1
@@ -160,9 +177,32 @@ func scaled(dst, src View, o Options) bool {
 			si := src.Offset + py*src.Stride
 			di := dst.Index(x0, y)
 			last := di + (end-y-1)*dst.Stride
+			if cols != nil && !tinted && sdata == nil && end == y+1 && o.Blend != Copy {
+				// One row from one source row in RAM, as when shrinking.
+				out := pixels[di : di+n]
+				for i, c := range cols {
+					if c < 0 {
+						continue
+					}
+					p := si + int(c)
+					if !sopaque && smask[p>>3]&(1<<uint(p&7)) == 0 {
+						continue
+					}
+					out[i] = spix[p]
+					if marking {
+						q := di + i
+						mask[q>>3] |= 1 << uint(q&7)
+					}
+				}
+				y = end
+				continue
+			}
 			sx := rowX
-			for i := 0; i < x1-x0; i, sx = i+1, sx+dx {
+			for i := 0; i < n; i, sx = i+1, sx+dx {
 				px := int(sx >> 32)
+				if cols != nil {
+					px = int(cols[i])
+				}
 				if px < 0 || px >= w {
 					continue
 				}
@@ -186,7 +226,9 @@ func scaled(dst, src View, o Options) bool {
 				} else {
 					v = spix[p]
 				}
-				v = tint(v, &o)
+				if tinted {
+					v = tint(v, &o)
+				}
 				for d := di + i; d <= last+i; d += stride {
 					pixels[d] = v
 					if marking {
@@ -199,6 +241,10 @@ func scaled(dst, src View, o Options) bool {
 	}
 	return true
 }
+
+// columnTable holds scaled's source columns. It is kept here: on the stack
+// of a microcontroller it would be too large and go to the heap.
+var columnTable [512]int32
 
 // tint scales a pixel's color. It matches shade at full alpha without Lighter.
 func tint(p uint16, o *Options) uint16 {
@@ -353,6 +399,27 @@ func integer(dst, src View, o Options) {
 			// An opaque destination's mask bits are already set.
 			if !db.Opaque {
 				db.SetMaskRange(di, n, true)
+			}
+		case plain && o.Blend != Copy && sdata == nil:
+			// Magnified with a mask: each source pixel's bit is read once,
+			// and a shown pixel is written as a run sx wide.
+			dmask := db.Mask
+			marking := !db.Opaque && dmask != nil
+			out := dpix[di : di+n]
+			column, i := firstColumn, 0
+			for run := sx - firstRepeat; i < n; column, run = column+1, sx {
+				end := min(n, i+run)
+				p := si + column
+				if smask[p>>3]&(1<<uint(p&7)) != 0 {
+					v := spix[p]
+					for j := i; j < end; j++ {
+						out[j] = v
+					}
+					if marking {
+						db.SetMaskRange(di+i, end-i, true)
+					}
+				}
+				i = end
 			}
 		case plain:
 			column, repeat := firstColumn, firstRepeat

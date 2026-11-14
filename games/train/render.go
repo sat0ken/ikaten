@@ -4,7 +4,7 @@ import (
 	"image/color"
 
 	ebiten "github.com/sat0ken/ikaten"
-	"github.com/sat0ken/ikaten/ebitenutil"
+	"github.com/sat0ken/ikaten/games/pixtext"
 )
 
 // The view from the cab: a camera camHeight meters above the rails looks
@@ -12,9 +12,9 @@ import (
 // distance; the track's sideways offset at that distance comes from the
 // curves ahead.
 const (
-	viewHeight = 82 // rows of the view; the gauges are below
-	horizon    = 36
-	focal      = 100 // pixels per meter at one meter
+	viewHeight = 164 // rows of the view; the gauges are below
+	horizon    = 72
+	focal      = 200 // pixels per meter at one meter
 	camHeight  = 3.0
 	near       = 3.0
 	offStep    = 5 // meters between samples of the track's offset
@@ -74,6 +74,8 @@ var (
 	colorBrakeOn = rgb(255, 150, 50)
 	colorWhite   = rgb(240, 240, 240)
 	colorBox     = rgb(16, 20, 32)
+	colorBoxLit  = rgb(120, 126, 140)
+	colorRailLit = rgb(236, 236, 242)
 )
 
 var (
@@ -85,7 +87,10 @@ var (
 	textPower  = color.RGBA{110, 180, 255, 255}
 	textBrake  = color.RGBA{255, 160, 60, 255}
 	textBlack  = color.RGBA{0, 0, 0, 255}
+	textShadow = color.RGBA{10, 12, 20, 255}
 )
+
+var text pixtext.Line
 
 func init() {
 	colorGround[field] = [3]*ebiten.Image{rgb(92, 152, 70), rgb(80, 138, 62), rgb(86, 145, 66)}
@@ -144,17 +149,24 @@ type view struct {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	v := &g.view
+	mark(0)
 	v.trackOffsets(g.pos)
 	g.drawSky(screen)
+	mark(1)
 	g.drawGround(screen)
+	mark(2)
 	g.drawStations(screen)
+	mark(3)
 	g.collectObjects()
 	g.drawObjects(screen)
+	mark(4)
 	g.drawWire(screen)
-	fillRect(screen, colorFrame, 0, 0, ScreenWidth, 3)
+	fillRect(screen, colorFrame, 0, 0, ScreenWidth, 6)
 	g.drawNotch(screen)
+	mark(5)
 	g.drawGauges(screen)
 	g.drawOverlay(screen)
+	mark(6)
 }
 
 // trackOffsets integrates the curves ahead into the track's sideways offset.
@@ -216,7 +228,7 @@ func (g *Game) drawSky(screen *ebiten.Image) {
 		x -= hillWidth
 	}
 	for ; x < ScreenWidth; x += hillWidth {
-		drawAt(screen, imageHills, x, horizon+1-hillHeight)
+		drawAt(screen, g.art.hills, x, horizon+1-hillHeight)
 	}
 }
 
@@ -233,11 +245,46 @@ func span(screen, c *ebiten.Image, x0, x1 float32, y int) {
 	fillRect(screen, c, l, y, r-l, 1)
 }
 
+// ground is what lies under a row before the track: its color across the
+// whole row.
+func (g *Game) groundRow(y int) *ebiten.Image {
+	z := rowZ[y]
+	dz := z - rowZ[y+1] // meters covered by the row
+	s := g.pos + z
+	shade := 2
+	if dz < 4 {
+		shade = int(s/12) & 1
+	}
+	kind := sceneryAt(s)
+	switch {
+	case onCrossing(s):
+		return colorRoad
+	case kind == river:
+		return colorWater[shade]
+	case atStation(s):
+		return colorYard[shade]
+	}
+	return colorGround[kind][shade]
+}
+
+// drawGround fills the ground row by row from the horizon down, the rows
+// alike at once, and then draws the track and the shore over it.
 func (g *Game) drawGround(screen *ebiten.Image) {
 	v := &g.view
+	from, last := horizon+1, g.groundRow(horizon+1)
+	for y := horizon + 2; y <= viewHeight; y++ {
+		var c *ebiten.Image
+		if y < viewHeight {
+			c = g.groundRow(y)
+		}
+		if c != last {
+			fillRect(screen, last, 0, from, ScreenWidth, y-from)
+			from, last = y, c
+		}
+	}
 	for y := horizon + 1; y < viewHeight; y++ {
 		z := rowZ[y]
-		dz := z - rowZ[y+1] // meters covered by the row
+		dz := z - rowZ[y+1]
 		s := g.pos + z
 		shade := 2
 		if dz < 4 {
@@ -245,23 +292,10 @@ func (g *Game) drawGround(screen *ebiten.Image) {
 		}
 		col := v.at(z)
 		kind := sceneryAt(s)
-		ground := colorGround[kind][shade]
-		if atStation(s) && kind != river {
-			ground = colorYard[shade]
-		}
-		switch kind {
-		case river:
-			fillRect(screen, colorWater[shade], 0, y, ScreenWidth, 1)
-		case coast:
-			fillRect(screen, ground, 0, y, ScreenWidth, 1)
+		crossing := onCrossing(s)
+		if kind == coast && !crossing {
 			span(screen, colorWater[shade], 0, col.x(-7), y)
 			span(screen, colorSand, col.x(-7), col.x(-2.2), y)
-		default:
-			fillRect(screen, ground, 0, y, ScreenWidth, 1)
-		}
-		crossing := onCrossing(s)
-		if crossing {
-			fillRect(screen, colorRoad, 0, y, ScreenWidth, 1)
 		}
 		if s > lineEnd {
 			continue
@@ -284,6 +318,10 @@ func (g *Game) drawGround(screen *ebiten.Image) {
 		for _, side := range [2]float32{-gauge / 2, gauge / 2} {
 			x := col.x(side)
 			span(screen, colorRail, x-w/2, x+w/2, y)
+			if w >= 3 {
+				// The rail's head catches the light.
+				span(screen, colorRailLit, x-w/2, x, y)
+			}
 		}
 	}
 }
@@ -314,7 +352,7 @@ func (g *Game) drawStations(screen *ebiten.Image) {
 			}
 		}
 		c0, c1 := st.stop-canopyBack-g.pos, st.stop-canopyFore-g.pos
-		for y := horizon - 1; y >= 3; y-- {
+		for y := horizon - 1; y >= 6; y-- {
 			zr := (canopyHeight - camHeight) * focal / float32(horizon-y)
 			if zr >= max(c0, near) && zr <= c1 {
 				col := v.at(zr)
@@ -443,27 +481,27 @@ func (g *Game) drawObject(screen *ebiten.Image, o *object) {
 	var img *ebiten.Image
 	switch o.kind {
 	case objTree:
-		img = imageTree
+		img = g.art.tree
 	case objPine:
-		img = imagePine
+		img = g.art.pine
 	case objHouse:
-		img = imageHouse[0]
+		img = g.art.house[0]
 	case objFlats:
-		img = imageHouse[1]
+		img = g.art.house[1]
 	case objLimit:
-		img = imageLimit[o.arg]
+		img = g.art.limit[o.arg]
 	case objWhistle:
-		img = imageWhistle
+		img = g.art.whistle
 	case objCrossing:
-		img = imageCrossing[(g.ticks/20+o.arg)%2]
+		img = g.art.crossing[(g.ticks/20+o.arg)%2]
 	case objDistance:
-		img = imageDistance[o.arg]
+		img = g.art.distance[o.arg]
 	case objStopMark:
-		img = imageStopMark
+		img = g.art.stopMark
 	case objBoard:
-		img = imageBoard
+		img = g.art.board
 	case objBuffer:
-		img = imageBuffer
+		img = g.art.buffer
 	}
 	scale := spriteHeight[o.kind] * ppm / float32(img.Bounds().Dy())
 	if scale*float32(img.Bounds().Dy()) < 1 {
@@ -472,27 +510,35 @@ func (g *Game) drawObject(screen *ebiten.Image, o *object) {
 	drawScaled(screen, img, x, bottom, scale)
 }
 
-// drawWire draws the contact wire over the track, one pixel on each row above
-// the horizon.
+// drawWire draws the contact wire over the track, one pixel wide, a run of
+// rows at a time where it stays in one column.
 func (g *Game) drawWire(screen *ebiten.Image) {
 	v := &g.view
-	for y := horizon - 1; y >= 3; y-- {
+	runX, runY, runN := 0, 0, 0
+	for y := horizon - 1; y >= 6; y-- {
 		z := (wireHeight - camHeight) * focal / float32(horizon-y)
 		if z < near || g.pos+z > lineEnd {
 			continue
 		}
-		fillRect(screen, colorWire, int(v.sx(0, z)), y, 1, 1)
+		x := int(v.sx(0, z))
+		if runN > 0 && x == runX && y == runY-1 {
+			runY, runN = y, runN+1
+			continue
+		}
+		fillRect(screen, colorWire, runX, runY, 1, runN)
+		runX, runY, runN = x, y, 1
 	}
+	fillRect(screen, colorWire, runX, runY, 1, runN)
 }
 
 // drawNotch shows the handle: P5 at the top, then N, the brakes and EB.
 func (g *Game) drawNotch(screen *ebiten.Image) {
-	const x, top, cell = 112, 6, 5
-	fillRect(screen, colorFrame, x-2, top-2, 9, (maxPower+maxBrake+2)*cell+3)
+	const x, top, cell = 222, 12, 9
+	fillRect(screen, colorFrame, x-3, top-3, 16, (maxPower+maxBrake+2)*cell+6)
 	for i := maxPower; i >= notchEB; i-- {
 		y := top + (maxPower-i)*cell
 		if i == notchEB {
-			y++
+			y += 2
 		}
 		c := colorCell
 		if i == 0 {
@@ -508,129 +554,75 @@ func (g *Game) drawNotch(screen *ebiten.Image) {
 		case i == notchEB && g.notch == notchEB:
 			c = colorRed
 		}
-		fillRect(screen, c, x, y, 5, cell-1)
+		fillRect(screen, c, x, y, 10, cell-2)
 	}
 }
 
-// text builds a line of the 3x5 font in a fixed buffer, so that drawing
-// numbers makes no strings and does not allocate.
-type text struct {
-	b [24]byte
-	n int
+// clock adds a time of day.
+func clock(l *pixtext.Line, seconds int) *pixtext.Line {
+	return l.Pad(seconds/3600%24, 2).Str(":").Pad(seconds/60%60, 2).Str(":").Pad(seconds%60, 2)
 }
 
-var buf text
-
-func (t *text) reset() *text { t.n = 0; return t }
-
-func (t *text) str(s string) *text {
-	for i := range len(s) {
-		t.b[t.n] = s[i]
-		t.n++
-	}
-	return t
-}
-
-func (t *text) num(n int) *text {
-	if n < 0 {
-		t.str("-")
-		n = -n
-	}
-	var d [10]byte
-	i := len(d)
-	for {
-		i--
-		d[i] = byte('0' + n%10)
-		n /= 10
-		if n == 0 {
-			break
-		}
-	}
-	for ; i < len(d); i++ {
-		t.b[t.n] = d[i]
-		t.n++
-	}
-	return t
-}
-
-// signed writes n with a plus sign when it is positive.
-func (t *text) signed(n int) *text {
+// signed adds n with a plus sign when it is positive.
+func signed(l *pixtext.Line, n int) *pixtext.Line {
 	if n > 0 {
-		t.str("+")
+		l.Str("+")
 	}
-	return t.num(n)
+	return l.Num(n)
 }
 
-func (t *text) two(n int) *text {
-	t.b[t.n], t.b[t.n+1] = byte('0'+n/10), byte('0'+n%10)
-	t.n += 2
-	return t
-}
-
-func (t *text) clock(seconds int) *text {
-	return t.two(seconds / 3600 % 24).str(":").two(seconds / 60 % 60).str(":").two(seconds % 60)
-}
-
-// meters writes a distance, with tenths below ten meters.
-func (t *text) meters(d float32, plus bool) *text {
+// meters adds a distance, with tenths below ten meters.
+func meters(l *pixtext.Line, d float32, plus bool) *pixtext.Line {
 	tenths := int(max(d, -d)*10 + 0.5)
 	switch {
 	case d < 0 && tenths > 0:
-		t.str("-")
+		l.Str("-")
 	case plus && tenths > 0:
-		t.str("+")
+		l.Str("+")
 	}
 	if tenths < 100 {
-		t.num(tenths / 10).str(".").num(tenths % 10)
+		l.Num(tenths / 10).Str(".").Num(tenths % 10)
 	} else {
-		t.num((tenths + 5) / 10)
+		l.Num((tenths + 5) / 10)
 	}
-	return t.str("m")
+	return l.Str("M")
 }
 
-func (t *text) notch(n int) *text {
+func notch(l *pixtext.Line, n int) *pixtext.Line {
 	switch {
 	case n == notchEB:
-		return t.str("EB")
+		return l.Str("EB")
 	case n > 0:
-		return t.str("P").num(n)
+		return l.Str("P").Num(n)
 	case n < 0:
-		return t.str("B").num(-n)
+		return l.Str("B").Num(-n)
 	}
-	return t.str("N")
-}
-
-// draw draws the line with its left edge at x, or its right edge at -x.
-func (t *text) draw(screen *ebiten.Image, x, y, scale int, c color.RGBA) {
-	if x < 0 {
-		x = -x - t.n*4*scale + scale
-	}
-	drawText(screen, t.b[:t.n], x, y, scale, c)
+	return l.Str("N")
 }
 
 func (g *Game) drawGauges(screen *ebiten.Image) {
 	fillRect(screen, colorPanel, 0, viewHeight, ScreenWidth, ScreenHeight-viewHeight)
-	fillRect(screen, colorPanelHi, 0, viewHeight, ScreenWidth, 1)
+	fillRect(screen, colorPanelHi, 0, viewHeight, ScreenWidth, 2)
 	kmh := int(g.v * 3.6)
 	lim := g.limitNow()
 	c := textWhite
 	if kmh > lim {
 		c = textRed
 	}
-	buf.reset().num(kmh).draw(screen, -27, 85, 2, c)
-	ebitenutil.DebugPrintAt(screen, "km/h", 30, 84)
-	// The speed bar, half a pixel per km/h, with the limit marked.
-	fillRect(screen, colorBarBack, 4, 97, 60, 3)
+	text.Reset().Num(kmh).Right(screen, 62, 170, 3, c)
+	text.Reset().Str("KM/H").Draw(screen, 68, 184, 1, textGray)
+	// The speed bar, a pixel per km/h, with the limit marked.
+	fillRect(screen, colorBarBack, 8, 197, 120, 6)
 	bar := colorGreen
 	if kmh > lim {
 		bar = colorRed
 	}
-	fillRect(screen, bar, 4, 97, min(kmh, 120)/2, 3)
-	fillRect(screen, colorYellow, 4+lim/2, 95, 1, 7)
+	fillRect(screen, bar, 8, 197, min(kmh, 120), 6)
+	fillRect(screen, colorYellow, 8+lim, 193, 2, 14)
 	// The limit, as a sign: black on white with a red rim.
-	fillRect(screen, colorRed, 64, 84, 19, 14)
-	fillRect(screen, colorWhite, 65, 85, 17, 12)
-	buf.reset().num(lim).draw(screen, 66, 86, 2, textBlack)
+	fillRect(screen, colorRed, 136, 169, 40, 30)
+	fillRect(screen, colorWhite, 139, 172, 34, 24)
+	text.Reset().Num(lim).Center(screen, 156, 174, 3, textBlack)
 	nc := textWhite
 	switch {
 	case g.notch == notchEB:
@@ -640,116 +632,109 @@ func (g *Game) drawGauges(screen *ebiten.Image) {
 	case g.notch < 0:
 		nc = textBrake
 	}
-	buf.reset().notch(g.notch).draw(screen, 88, 86, 2, nc)
+	notch(text.Reset(), g.notch).Draw(screen, 186, 172, 3, nc)
 	if p := int(gradeAt(g.pos - trainLength/2)); p > 0 {
-		buf.reset().str("/").num(p).draw(screen, 88, 98, 1, textGray)
+		text.Reset().Str("/").Num(p).Draw(screen, 186, 200, 1, textGray)
 	} else if p < 0 {
-		buf.reset().str("\\").num(-p).draw(screen, 88, 98, 1, textGray)
+		text.Reset().Str("\\").Num(-p).Draw(screen, 186, 200, 1, textGray)
 	}
 	st := stations[min(g.next, len(stations)-1)]
-	ebitenutil.DebugPrintAt(screen, st.name, 3, 99)
+	text.Reset().Str(st.name).Draw(screen, 8, 211, 2, textWhite)
 	dc := textWhite
 	if st.stop-g.pos < 100 {
 		dc = textYellow
 	}
-	buf.reset().meters(st.stop-g.pos, false).draw(screen, -(ScreenWidth - 3), 104, 2, dc)
+	meters(text.Reset(), st.stop-g.pos, false).Right(screen, ScreenWidth-6, 211, 2, dc)
 	// The time now, and the scheduled arrival.
-	buf.reset().clock(startSeconds+g.clock/tps).draw(screen, 4, 113, 1, textWhite)
-	buf.reset().str(">").draw(screen, 38, 113, 1, textGray)
-	buf.reset().clock(startSeconds+st.arrive).draw(screen, 44, 113, 1, textYellow)
+	clock(text.Reset(), startSeconds+g.clock/tps).Draw(screen, 8, 229, 1, textWhite)
+	text.Reset().Str(">").Draw(screen, 62, 229, 1, textGray)
+	clock(text.Reset(), startSeconds+st.arrive).Draw(screen, 74, 229, 1, textYellow)
 }
 
 func (g *Game) drawOverlay(screen *ebiten.Image) {
+	const mid = ScreenWidth / 2
 	if g.horn > 0 {
-		ebitenutil.DebugPrintAt(screen, "PAAN!", 45, 2)
+		text.Reset().Str("PAAN!").Shade(textShadow).Center(screen, mid, 12, 2, textWhite)
 	}
 	switch g.mode {
 	case modeTitle:
-		box(screen, 10, 14, 100, 62)
-		ebitenutil.DebugPrintAt(screen, "IKA LINE", 36, 12)
-		ebitenutil.DebugPrintAt(screen, "TRAIN DRIVER", 24, 22)
+		box(screen, 20, 24, 200, 132)
+		text.Reset().Str("IKA LINE").Shade(colorShade).Center(screen, mid, 34, 3, textYellow)
+		text.Reset().Str("TRAIN DRIVER").Center(screen, mid, 64, 2, textWhite)
 		if g.modeTicks/30%2 == 0 {
-			ebitenutil.DebugPrintAt(screen, "PRESS A", 39, 36)
+			text.Reset().Str("PRESS A").Center(screen, mid, 90, 2, textGreen)
 		}
-		ebitenutil.DebugPrintAt(screen, "^ POWER v BRAKE", 15, 50)
-		ebitenutil.DebugPrintAt(screen, "A HORN  B N", 27, 60)
+		text.Reset().Str("UP: POWER   DOWN: BRAKE").Center(screen, mid, 120, 1, textWhite)
+		text.Reset().Str("A: HORN   B: NEUTRAL").Center(screen, mid, 136, 1, textWhite)
 		return
 	case modeStation:
 		g.drawResult(screen)
 		return
 	case modeEnd:
-		box(screen, 10, 10, 100, 64)
-		ebitenutil.DebugPrintAt(screen, "LAST STOP", 33, 8)
-		ebitenutil.DebugPrintAt(screen, "SCORE", 22, 24)
-		buf.reset().num(g.total()).draw(screen, -97, 30, 2, textYellow)
-		ebitenutil.DebugPrintAt(screen, "RANK", 22, 40)
-		buf.reset().str(g.rank()).draw(screen, -97, 46, 2, textYellow)
+		box(screen, 20, 20, 200, 140)
+		text.Reset().Str("LAST STOP").Shade(colorShade).Center(screen, mid, 30, 2, textYellow)
+		text.Reset().Str("SCORE").Draw(screen, 40, 66, 1, textWhite)
+		text.Reset().Num(g.total()).Right(screen, 200, 58, 3, textYellow)
+		text.Reset().Str("RANK").Draw(screen, 40, 104, 1, textWhite)
+		text.Reset().Str(g.rank()).Right(screen, 200, 96, 3, textYellow)
 		if g.modeTicks > 60 && g.modeTicks/30%2 == 0 {
-			ebitenutil.DebugPrintAt(screen, "PRESS A", 39, 58)
+			text.Reset().Str("PRESS A").Center(screen, mid, 136, 1, textGreen)
 		}
 		return
 	}
 	if g.messageTicks > 0 && g.message != msgNone && g.messageTicks%30 < 22 {
-		msg := messages[g.message]
-		w := len(msg)*6 + 6
-		box(screen, (ScreenWidth-w)/2-4, 44, w, 12)
-		ebitenutil.DebugPrintAt(screen, msg, (ScreenWidth-len(msg)*6)/2-4, 42)
+		text.Reset().Str(messages[g.message])
+		w := text.Width(2) + 16
+		box(screen, (ScreenWidth-w)/2-8, 88, w, 22)
+		text.Center(screen, mid-8, 92, 2, textWhite)
 	}
 }
 
 // drawResult shows the score of the run to the station.
 func (g *Game) drawResult(screen *ebiten.Image) {
+	const mid = ScreenWidth / 2
 	r := &g.results[g.next]
-	box(screen, 8, 6, 98, 74)
-	name := stations[g.next].name
-	ebitenutil.DebugPrintAt(screen, name, (ScreenWidth-len(name)*6)/2-4, 4)
+	box(screen, 16, 12, 196, 148)
+	text.Reset().Str(stations[g.next].name).Shade(colorShade).Center(screen, mid-6, 20, 2, textYellow)
+	for i, label := range [...]string{"STOP", "TIME", "RIDE", "SPEED", "HORN"} {
+		y := 46 + i*16
+		text.Reset().Str(label).Draw(screen, 26, y, 1, textWhite)
+		pts := [...]int{r.stopPts, r.timePts, r.ridePts, r.speedPts, r.hornPts}[i]
+		if i > 2 {
+			signed(text.Reset(), pts)
+		} else {
+			text.Reset().Num(pts)
+		}
+		text.Right(screen, 202, y, 1, textWhite)
+	}
 	sc := textGreen
 	if r.stopPts < 40 {
 		sc = textYellow
 	}
-	buf.reset().meters(r.stopError, true).draw(screen, 48, 21, 1, sc)
+	meters(text.Reset(), r.stopError, true).Draw(screen, 96, 46, 1, sc)
 	tc := textGreen
 	if r.timePts < 20 {
 		tc = textYellow
 	}
-	buf.reset().signed(r.delay).str("s").draw(screen, 48, 30, 1, tc)
-	for i, label := range [...]string{"STOP", "TIME", "RIDE", "SPEED", "HORN"} {
-		y := 16 + i*9
-		ebitenutil.DebugPrintAt(screen, label, 12, y)
-		pts := [...]int{r.stopPts, r.timePts, r.ridePts, r.speedPts, r.hornPts}[i]
-		if i > 2 {
-			buf.reset().signed(pts)
-		} else {
-			buf.reset().num(pts)
-		}
-		buf.draw(screen, -100, y+5, 1, textWhite)
-	}
-	fillRect(screen, colorPanelHi, 12, 64, 90, 1)
-	ebitenutil.DebugPrintAt(screen, "TOTAL", 12, 63)
-	buf.reset().num(r.total).draw(screen, -100, 67, 2, textYellow)
+	signed(text.Reset(), r.delay).Str("S").Draw(screen, 96, 62, 1, tc)
+	fillRect(screen, colorPanelHi, 24, 128, 180, 1)
+	text.Reset().Str("TOTAL").Draw(screen, 26, 138, 1, textWhite)
+	text.Reset().Num(r.total).Right(screen, 202, 134, 2, textYellow)
 }
 
+// box is a dark panel with a two-tone frame, drawn side by side rather than
+// one over another.
 func box(screen *ebiten.Image, x, y, w, h int) {
-	fillRect(screen, colorPanelHi, x-1, y-1, w+2, h+2)
+	fillRect(screen, colorBoxLit, x-2, y-2, w+3, 1)
+	fillRect(screen, colorPanelHi, x+w+1, y-2, 1, 1)
+	fillRect(screen, colorPanelHi, x-2, y-1, w+4, 1)
+	fillRect(screen, colorPanelHi, x-2, y, 2, h)
+	fillRect(screen, colorPanelHi, x+w, y, 2, h)
+	fillRect(screen, colorPanelHi, x-2, y+h, w+4, 2)
 	fillRect(screen, colorBox, x, y, w, h)
 }
 
-// drawText draws text in the 3x5 font at the given scale and color.
-func drawText(screen *ebiten.Image, text []byte, x, y, scale int, c color.RGBA) {
-	var op ebiten.DrawImageOptions
-	for i, ch := range text {
-		img := imageGlyph[ch]
-		if img == nil {
-			continue
-		}
-		op.GeoM.Reset()
-		op.GeoM.Scale(float64(scale), float64(scale))
-		op.GeoM.Translate(float64(x+i*4*scale), float64(y))
-		op.ColorScale.Reset()
-		op.ColorScale.Scale(float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, 1)
-		screen.DrawImage(img, &op)
-	}
-}
+var colorShade = color.RGBA{70, 74, 84, 255}
 
 func drawAt(screen, img *ebiten.Image, x, y int) {
 	var op ebiten.DrawImageOptions
