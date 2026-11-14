@@ -10,10 +10,9 @@ import (
 	"github.com/sat0ken/ikaten/games/dungeon"
 )
 
-// autoplay starts the game and fires on a fixed rhythm, and prints timings
-// every 10 seconds. It presses Space: boards read their buttons into KeyZ
-// and the arrow keys every tick, which would hide autoplay's presses, so on a
-// board the player stays where it starts while the slimes come.
+// autoplay starts the game, walks, turns and fires on a fixed rhythm, and
+// prints timings every 10 seconds. It fires with Space, which boards do not
+// set from their buttons.
 type autoplay struct {
 	*dungeon.Game
 	ticks         int

@@ -56,10 +56,15 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	mark(5)
 }
 
+// colW is the width of a wall's column in pixels: a ray is cast for every
+// colW columns of the screen. On the badge a column costs some 50 us
+// whatever its width, and 240 of them took 11 ms.
+const colW = 2
+
 func (g *Game) drawWalls(screen *ebiten.Image) {
 	var op ebiten.DrawImageOptions
-	for x := range ScreenWidth {
-		cameraX := 2*float32(x)/ScreenWidth - 1
+	for x := 0; x < ScreenWidth; x += colW {
+		cameraX := 2*(float32(x)+colW/2.0)/ScreenWidth - 1
 		rayX, rayY := g.dirX+g.planeX*cameraX, g.dirY+g.planeY*cameraX
 		mapX, mapY := int(g.px), int(g.py)
 		deltaX, deltaY := float32(1e30), float32(1e30)
@@ -100,7 +105,9 @@ func (g *Game) drawWalls(screen *ebiten.Image) {
 			wallX = g.px + dist*rayX
 		}
 		dist = max(dist, 0.05)
-		g.zbuf[x] = dist
+		for i := range colW {
+			g.zbuf[x+i] = dist
+		}
 		texX := int((wallX - float32(int(wallX))) * texSize)
 		if (side == 0 && rayX > 0) || (side == 1 && rayY < 0) {
 			texX = texSize - 1 - texX
@@ -111,7 +118,7 @@ func (g *Game) drawWalls(screen *ebiten.Image) {
 			shade *= 0.75
 		}
 		op.GeoM.Reset()
-		op.GeoM.Scale(1, float64(height/texSize))
+		op.GeoM.Scale(colW, float64(height/texSize))
 		op.GeoM.Translate(float64(x), float64(viewHeight/2-height/2))
 		op.ColorScale.Reset()
 		op.ColorScale.Scale(shade, shade, shade, 1)
@@ -144,16 +151,16 @@ func (g *Game) drawSlimes(screen *ebiten.Image) {
 		left := centerX - size/2
 		top := viewHeight/2 + viewHeight/depth/2 - size
 		shade := min(1, max(0.3, 1.2-depth*0.12))
-		for x := max(0, int(left)); x < min(ScreenWidth, int(left+size)+1); x++ {
+		for x := max(0, int(left)) &^ (colW - 1); x < min(ScreenWidth, int(left+size)+1); x += colW {
 			if depth >= g.zbuf[x] {
 				continue
 			}
-			texX := int((float32(x) - left) * texSize / size)
+			texX := int((float32(x) + colW/2.0 - left) * texSize / size)
 			if texX < 0 || texX >= texSize {
 				continue
 			}
 			op.GeoM.Reset()
-			op.GeoM.Scale(1, float64(size/texSize))
+			op.GeoM.Scale(colW, float64(size/texSize))
 			op.GeoM.Translate(float64(x), float64(top))
 			op.ColorScale.Reset()
 			if s.hurt > 0 {
