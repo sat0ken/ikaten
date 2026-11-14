@@ -64,3 +64,36 @@ func copyPixels(dst, src []uint16) {
 		dst[i] = src[i]
 	}
 }
+
+// readPixels reads len(out) pixels of an image in flash, starting at pixel p,
+// two at a time where the data is aligned.
+func readPixels(out []uint16, data []byte, p int) {
+	n := len(out)
+	if n == 0 {
+		return
+	}
+	in := data[2*p : 2*(p+n)]
+	a := uintptr(unsafe.Pointer(&in[0]))
+	if a&1 != 0 {
+		for i := range out {
+			out[i] = uint16(in[2*i]) | uint16(in[2*i+1])<<8
+		}
+		return
+	}
+	i := 0
+	if a&2 != 0 {
+		out[0] = *(*uint16)(unsafe.Pointer(&in[0]))
+		i = 1
+	}
+	if m := (n - i) >> 1; m > 0 {
+		w := unsafe.Slice((*uint32)(unsafe.Pointer(&in[2*i])), m)
+		for k, v := range w {
+			// Little-endian, like the 16-bit pixels.
+			out[i+2*k], out[i+2*k+1] = uint16(v), uint16(v>>16)
+		}
+		i += m << 1
+	}
+	if i < n {
+		out[i] = *(*uint16)(unsafe.Pointer(&in[2*i]))
+	}
+}

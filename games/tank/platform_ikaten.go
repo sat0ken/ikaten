@@ -12,11 +12,11 @@ var (
 	groundData string
 	//go:embed assets/sprites.ika
 	spritesData string
-	//go:embed assets/sight.ika
-	sightData string
+	//go:embed assets/hills.ika
+	hillsData string
 )
 
-func loadAssets() (ground, sprites, sight *ebiten.Image) {
+func loadAssets() (ground, sprites, hills *ebiten.Image) {
 	load := func(data string) *ebiten.Image {
 		img, err := ebiten.NewImageFromString(data)
 		if err != nil {
@@ -24,5 +24,5 @@ func loadAssets() (ground, sprites, sight *ebiten.Image) {
 		}
 		return img
 	}
-	return load(groundData), load(spritesData), load(sightData)
+	return load(groundData), load(spritesData), load(hillsData)
 }

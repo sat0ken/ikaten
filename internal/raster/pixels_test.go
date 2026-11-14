@@ -2,6 +2,8 @@ package raster
 
 import (
 	"image"
+	"math/rand"
+	"reflect"
 	"testing"
 )
 
@@ -54,29 +56,40 @@ func TestMaskedBytes(t *testing.T) {
 	for i := range mask {
 		mask[i] = [...]byte{0xff, 0, 0xff, 0x5a, 0xff, 0}[i%6]
 	}
-	src := View{Buffer: &Buffer{Pixels: pixels, Mask: mask}, Bounds: image.Rect(0, 0, w, h), Stride: w}
-	for _, opaqueDst := range []bool{false, true} {
-		for _, blend := range []Blend{SourceOver, Copy} {
-			for tx := -9; tx < 12; tx++ {
-				var got, want View
-				for k, v := range []*View{&got, &want} {
-					dp := make([]uint16, 64*8)
-					dm := make([]byte, 64*8/8)
-					for i := range dp {
-						dp[i] = 0x1111
-					}
-					if opaqueDst {
-						for i := range dm {
-							dm[i] = 0xff
+	// The same image in memory, and in flash form at even and odd addresses.
+	raw := make([]byte, 2*w*h+1)
+	for i, p := range pixels {
+		raw[1+2*i], raw[2+2*i] = byte(p), byte(p>>8)
+	}
+	even := append([]byte(nil), raw[1:]...)
+	for _, src := range []View{
+		{Buffer: &Buffer{Pixels: pixels, Mask: mask}, Bounds: image.Rect(0, 0, w, h), Stride: w},
+		{Buffer: &Buffer{Data: even, Mask: mask}, Bounds: image.Rect(0, 0, w, h), Stride: w},
+		{Buffer: &Buffer{Data: raw[1:], Mask: mask}, Bounds: image.Rect(0, 0, w, h), Stride: w},
+	} {
+		for _, opaqueDst := range []bool{false, true} {
+			for _, blend := range []Blend{SourceOver, Copy} {
+				for tx := -9; tx < 12; tx++ {
+					var got, want View
+					for k, v := range []*View{&got, &want} {
+						dp := make([]uint16, 64*8)
+						dm := make([]byte, 64*8/8)
+						for i := range dp {
+							dp[i] = 0x1111
 						}
+						if opaqueDst {
+							for i := range dm {
+								dm[i] = 0xff
+							}
+						}
+						*v = View{Buffer: &Buffer{Pixels: dp, Mask: dm, Opaque: opaqueDst}, Bounds: image.Rect(0, 0, 64, 8), Stride: 64}
+						o := Options{A: 1, D: 1, TX: float32(tx), TY: 2, R: 256, G: 256, Blue: 256, Alpha: 256, Blend: blend}
+						draw(*v, src, o, k == 1)
 					}
-					*v = View{Buffer: &Buffer{Pixels: dp, Mask: dm, Opaque: opaqueDst}, Bounds: image.Rect(0, 0, 64, 8), Stride: 64}
-					o := Options{A: 1, D: 1, TX: float32(tx), TY: 2, R: 256, G: 256, Blue: 256, Alpha: 256, Blend: blend}
-					draw(*v, src, o, k == 1)
-				}
-				for i := range got.Buffer.Pixels {
-					if got.Buffer.Pixels[i] != want.Buffer.Pixels[i] || got.Buffer.Visible(i) != want.Buffer.Visible(i) {
-						t.Fatalf("opaque %v blend %d tx %d: pixel %d is %x, want %x", opaqueDst, blend, tx, i, got.Buffer.Pixels[i], want.Buffer.Pixels[i])
+					for i := range got.Buffer.Pixels {
+						if got.Buffer.Pixels[i] != want.Buffer.Pixels[i] || got.Buffer.Visible(i) != want.Buffer.Visible(i) {
+							t.Fatalf("data %v opaque %v blend %d tx %d: pixel %d is %x, want %x", src.Buffer.Data != nil, opaqueDst, blend, tx, i, got.Buffer.Pixels[i], want.Buffer.Pixels[i])
+						}
 					}
 				}
 			}
@@ -237,4 +250,91 @@ func TestColumnNearlyMatchesGeneral(t *testing.T) {
 		t.Fatalf("%d of %d pixels differ", differing, total)
 	}
 	t.Logf("%d of %d pixels differ", differing, total)
+}
+
+// Opaque images rotated and scaled with steps under a pixel, from RAM and
+// from flash data aligned to two bytes or not, take affineOpaque. It may
+// differ from the general path only on texel edges.
+func TestAffineOpaqueNearlyMatchesGeneral(t *testing.T) {
+	const w, h = 40, 30
+	pixels := make([]uint16, w*h)
+	raw := make([]byte, 2*w*h+1)
+	for i := range pixels {
+		pixels[i] = uint16(i*7919 + 3)
+	}
+	sources := map[string]View{"ram": {Buffer: &Buffer{Pixels: pixels}, Bounds: image.Rect(0, 0, w, h), Stride: w}}
+	for _, shift := range []int{0, 1} {
+		data := raw[shift : shift+2*w*h]
+		for i, p := range pixels {
+			data[2*i], data[2*i+1] = byte(p), byte(p>>8)
+		}
+		sources[[]string{"flash-aligned", "flash-odd"}[shift]] = View{Buffer: &Buffer{Data: data}, Bounds: image.Rect(0, 0, w, h), Stride: w}
+	}
+	rng := uint32(7)
+	random := func() float32 {
+		rng ^= rng << 13
+		rng ^= rng >> 17
+		rng ^= rng << 5
+		return float32(rng%20000)/10000 - 1
+	}
+	for name, src := range sources {
+		differing, total := 0, 0
+		for range 1000 {
+			// Rows of a floor: magnified, turned any way.
+			o := Options{A: 1 + random()*2, B: random() * 2, C: random() * 2, D: 1 + random()*2,
+				TX: random() * 30, TY: random() * 30, R: 256, G: 256, Blue: 256, Alpha: 256}
+			var got, want View
+			for i, v := range []*View{&got, &want} {
+				*v = View{Buffer: &Buffer{Pixels: make([]uint16, 64*64), Mask: make([]byte, 64*64/8)}, Bounds: image.Rect(0, 0, 64, 64), Stride: 64}
+				draw(*v, src, o, i == 1)
+			}
+			for i := range got.Buffer.Pixels {
+				total++
+				if got.Buffer.Pixels[i] != want.Buffer.Pixels[i] || got.Buffer.Visible(i) != want.Buffer.Visible(i) {
+					differing++
+				}
+			}
+		}
+		if differing*10000 > total {
+			t.Fatalf("%s: %d of %d pixels differ", name, differing, total)
+		}
+		t.Logf("%s: %d of %d pixels differ", name, differing, total)
+	}
+}
+
+// Rows of flash images, wide ones, at every alignment of the data and the
+// mask, at their size and magnified, must match the general path.
+func TestFlashRows(t *testing.T) {
+	const w, h = 700, 3
+	rng := rand.New(rand.NewSource(5))
+	for shift := range 4 {
+		raw := make([]byte, 2*w*h+shift)
+		for i := range raw {
+			raw[i] = byte(rng.Uint32())
+		}
+		rawMask := make([]byte, (w*h+7)/8+shift)
+		for i := range rawMask {
+			rawMask[i] = [...]byte{0xff, 0, 0xff, 0x5a, byte(rng.Uint32())}[i%5]
+		}
+		for _, masked := range []bool{false, true} {
+			b := &Buffer{Data: raw[shift:]}
+			if masked {
+				b.Mask = rawMask[shift:]
+			}
+			src := View{Buffer: b, Bounds: image.Rect(0, 0, w, h), Stride: w}
+			for _, sx := range []int{1, 2, 3} {
+				for _, c := range [][2]int{{-5, 500}, {0, 500}, {3, 500}, {-5, 800}, {3, 800}} {
+					tx := c[0]
+					var got, want View
+					for k, v := range []*View{&got, &want} {
+						*v = newView(c[1], 4, false)
+						draw(*v, src, Options{A: float32(sx), D: 1, TX: float32(tx), TY: 1, R: 256, G: 256, Blue: 256, Alpha: 256}, k == 1)
+					}
+					if !reflect.DeepEqual(got.Buffer, want.Buffer) {
+						t.Fatalf("shift %d masked %v scale %d tx %d", shift, masked, sx, tx)
+					}
+				}
+			}
+		}
+	}
 }

@@ -2,7 +2,7 @@
 // ships of a passing convoy with torpedoes, and lower the periscope before the
 // escort detects the submarine and attacks with depth charges. It uses only the
 // Ebitengine API, and every image is drawn by code, so it also builds with
-// Ebitengine.
+// Ebitengine. It draws at 240x240.
 //
 // The world is flat, in meters, with x to the east and y to the south. The
 // submarine starts at the origin and moves only with the periscope down.
@@ -17,13 +17,13 @@ import (
 )
 
 const (
-	ScreenWidth  = 120
-	ScreenHeight = 120
-	horizon      = 58
-	scopeX       = 60.0 // the periscope's circle
-	scopeY       = 60.0
-	scopeRadius  = 54.0
-	sonarRadius  = 52
+	ScreenWidth  = 240
+	ScreenHeight = 240
+	horizon      = 116
+	scopeX       = 120.0 // the periscope's circle
+	scopeY       = 120.0
+	scopeRadius  = 108.0
+	sonarRadius  = 104
 	sonarRange   = 2600 // meters at the sonar plot's rim
 
 	wideView  = 40 * math.Pi / 180
@@ -159,12 +159,19 @@ type Game struct {
 	charges              [maxCharges]charge
 	blasts               [maxBlasts]blast
 	order                [maxShips]int
-	clips                [ScreenHeight + 1]*ebiten.Image // screen rows above y, for ships at the waterline
+	clips                [ScreenHeight - clipTop + 1]*ebiten.Image // screen rows above clipTop+i, for ships at the waterline
 	clipsOf              *ebiten.Image
+	art                  *sprites
+	filled               *ebiten.Image // the screen filled whole, so opaque
 }
 
+// clipTop is the highest waterline row, with the view shaken up.
+const clipTop = horizon - 2
+
 func NewGame() *Game {
-	g := &Game{rng: 2463534242}
+	// Draw covers the whole screen anyway.
+	ebiten.SetScreenClearedEveryFrame(false)
+	g := &Game{rng: 2463534242, art: newSprites()}
 	g.newCampaign()
 	return g
 }

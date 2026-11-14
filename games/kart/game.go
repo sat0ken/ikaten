@@ -13,12 +13,12 @@ import (
 )
 
 const (
-	ScreenWidth  = 120
-	ScreenHeight = 120
-	horizon      = 34 // the first ground row
-	focal        = 60 // pixels; a 90 degree view
-	camHeight    = 16 // world units
-	camDist      = 13 // the camera follows this far behind the player
+	ScreenWidth  = 240
+	ScreenHeight = 240
+	horizon      = 68  // the first ground row
+	focal        = 120 // pixels; a 90 degree view
+	camHeight    = 16  // world units
+	camDist      = 13  // the camera follows this far behind the player
 	farthest     = 320
 	laps         = 3
 	karts        = 4
@@ -76,6 +76,8 @@ const (
 )
 
 type Game struct {
+	art *sprites
+
 	mode             mode
 	ticks, modeTicks int
 	raceTicks        int
@@ -88,13 +90,11 @@ type Game struct {
 	// The camera: position, angle and its forward and right vectors.
 	camX, camY, camAngle float32
 	fx, fy, rx, ry       float32
-	rows                 [ScreenHeight]*ebiten.Image // one-row subimages of the screen
-	rowsOf               *ebiten.Image
 	sprites              [karts]drawItem
 }
 
 func NewGame() *Game {
-	g := &Game{}
+	g := &Game{art: newSprites()}
 	g.reset()
 	return g
 }

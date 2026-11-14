@@ -12,7 +12,7 @@ import "math"
 const (
 	Size        = 1024 // meters on each side
 	Half        = Size / 2
-	TexelMeters = 4 // the ground texture covers 4 m with each pixel
+	TexelMeters = 2 // the ground texture covers 2 m with each pixel
 	TextureSize = Size / TexelMeters
 	CellMeters  = 64 // the obstacle grid
 	Cells       = Size / CellMeters
@@ -183,27 +183,26 @@ func build() []Obstacle {
 func init() { Obstacles = build() }
 
 // The sprite sheet: tank hulls and turrets from 16 directions for each of the
-// three enemy kinds, houses from 8 (they look the same turned half around),
-// two trees and the distant hills. Sprites have PixelsPerMeter, and an anchor:
-// the pixel over the object's center on the ground.
+// three enemy kinds, houses from 8 (they look the same turned half around) and
+// two trees. Sprites have PixelsPerMeter, and an anchor: the pixel over the
+// object's center on the ground. The distant hills are a strip of their own.
 const (
-	PixelsPerMeter = 4
+	PixelsPerMeter = 8
 	TankKinds      = 3
 	TankFrames     = 16
-	TankW, TankH   = 40, 18
-	TankAX, TankAY = 20, 14
+	TankW, TankH   = 80, 36
+	TankAX, TankAY = 40, 28
 	HouseFrames    = 8
-	HouseW, HouseH = 52, 36
-	HouseAX        = 26
-	HouseAY        = 32
+	HouseW, HouseH = 104, 72
+	HouseAX        = 52
+	HouseAY        = 64
 	HouseY         = TankKinds * 2 * TankH
-	TreeW, TreeH   = 20, 40
-	TreeAX, TreeAY = 10, 39
+	TreeW, TreeH   = 40, 80
+	TreeAX, TreeAY = 20, 78
 	TreeX          = HouseFrames * HouseW
-	HillsW, HillsH = 256, 16
-	HillsY         = HouseY + TreeH
 	SheetW         = TankFrames * TankW
-	SheetH         = HillsY + HillsH
+	SheetH         = HouseY + TreeH
+	HillsW, HillsH = 512, 32
 )
 
 // TankCell returns the sheet position of a tank frame; part 0 is the hull and
@@ -214,7 +213,6 @@ func TankCell(kind, part, frame int) (x, y int) {
 
 // The zoomed gunsight is a circle around the gun's axis.
 const (
-	SightW, SightH = 120, 120
-	SightX, SightY = 60, 54
-	SightRadius    = 51
+	SightX, SightY = 120, 108
+	SightRadius    = 102
 )

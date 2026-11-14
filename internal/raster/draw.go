@@ -1,6 +1,9 @@
 package raster
 
-import "math"
+import (
+	"math"
+	"unsafe"
+)
 
 type Blend uint8
 
@@ -303,10 +306,16 @@ func affine(dst, src View, o Options) bool {
 	// clipped area bound them. Past 1e9 the 32.32 fixed point could overflow.
 	fx0, fx1 := float32(x0)+.5-o.TX, float32(x1)-.5-o.TX
 	fy0, fy1 := float32(y0)+.5-o.TY, float32(y1)-.5-o.TY
+	// small reports whether every source coordinate is within 16.16 fixed
+	// point, with room for a pixel's step.
+	small := sw < 16384 && sh < 16384
 	for _, c := range [4][2]float32{{fx0, fy0}, {fx1, fy0}, {fx0, fy1}, {fx1, fy1}} {
 		u, v := ia*c[0]+ib*c[1], ic*c[0]+id*c[1]
 		if u < -1e9 || u > 1e9 || v < -1e9 || v > 1e9 {
 			return false
+		}
+		if u < -16384 || u > 16384 || v < -16384 || v > 16384 {
+			small = false
 		}
 	}
 	const unit = 4294967296.0
@@ -337,6 +346,10 @@ func affine(dst, src View, o Options) bool {
 				dst.Buffer.SetMaskRange(di+lo, hi-lo, true)
 			}
 		}
+		return true
+	}
+	if plain && opaque && small && (ia > -1 && ia < 1 && ic > -1 && ic < 1) {
+		affineOpaque(dst, src, x0, x1, y0, y1, rowX, rowY, stepX, stepY, dx, dy, marking)
 		return true
 	}
 	for y := y0; y < y1; y, rowX, rowY = y+1, rowX+stepX, rowY+stepY {
@@ -412,6 +425,48 @@ func ceilDiv(a, b int64) int64 {
 	return q
 }
 
+// affineOpaque is affine's pixel loop for an opaque source without a color
+// scale, a step of under a source pixel along the row and coordinates within
+// 16.16 fixed point: as a row of a floor or a road. Its 32-bit sums cost
+// less than 32.32 ones on a 32-bit processor; they can drift from the 32.32
+// ones by a 65536th of a pixel a step, so a sample can differ from the
+// general path only within that of a texel's edge. An image in flash is read
+// a pixel at a time where its data is aligned to two bytes.
+func affineOpaque(dst, src View, x0, x1, y0, y1 int, rowX, rowY, stepX, stepY, dx, dy int64, marking bool) {
+	sw, sh := uint32(src.Bounds.Dx()), uint32(src.Bounds.Dy())
+	pixels, mask := dst.Buffer.Pixels, dst.Buffer.Mask
+	data, spix := src.Buffer.Data, src.Buffer.Pixels
+	aligned := data != nil && uintptr(unsafe.Pointer(&data[0]))&1 == 0
+	// Steps rounded to the nearest 65536th, so the drift has no bias.
+	du, dv := int32((dx+1<<15)>>16), int32((dy+1<<15)>>16)
+	n := x1 - x0
+	for y := y0; y < y1; y, rowX, rowY = y+1, rowX+stepX, rowY+stepY {
+		di := dst.Index(x0, y)
+		out := pixels[di : di+n]
+		u, v := int32(rowX>>16), int32(rowY>>16)
+		for i := range out {
+			px, py := uint32(u>>16), uint32(v>>16)
+			u, v = u+du, v+dv
+			if px >= sw || py >= sh {
+				continue
+			}
+			p := src.Offset + int(py)*src.Stride + int(px)
+			switch {
+			case data == nil:
+				out[i] = spix[p]
+			case aligned:
+				out[i] = *(*uint16)(unsafe.Pointer(&data[2*p]))
+			default:
+				out[i] = uint16(data[2*p]) | uint16(data[2*p+1])<<8
+			}
+			if marking {
+				q := di + i
+				mask[q>>3] |= 1 << uint(q&7)
+			}
+		}
+	}
+}
+
 // span returns the destination pixels covering start to start+length, clipped
 // to lo and hi. Pixels whose centers fall outside are rejected while sampling.
 func span(start, length float32, lo, hi int) (int, int) {
@@ -465,7 +520,7 @@ func integer(dst, src View, o Options) {
 			if !db.Opaque {
 				db.SetMaskRange(di, n, true)
 			}
-		case plain && o.Blend != Copy && sdata == nil:
+		case plain && o.Blend != Copy:
 			// Magnified with a mask: each source pixel's bit is read once,
 			// and a shown pixel is written as a run sx wide.
 			dmask := db.Mask
@@ -476,7 +531,12 @@ func integer(dst, src View, o Options) {
 				end := min(n, i+run)
 				p := si + column
 				if smask[p>>3]&(1<<uint(p&7)) != 0 {
-					v := spix[p]
+					var v uint16
+					if sdata != nil {
+						v = uint16(sdata[2*p]) | uint16(sdata[2*p+1])<<8
+					} else {
+						v = spix[p]
+					}
 					for j := i; j < end; j++ {
 						out[j] = v
 					}
@@ -545,6 +605,24 @@ func mirrored(dst, src View, o Options) {
 		p0 := src.Offset + (y-ty)/sy*src.Stride + tx - x0 - 1
 		di := dst.Index(x0, y)
 		out := dpix[di : di+n]
+		if sdata == nil && o.Blend != Copy && !marking {
+			// From RAM onto an opaque screen: the source row is walked
+			// backward with nothing but its mask to check.
+			row := spix[p0-n+1 : p0+1]
+			if opaque {
+				for i := range out {
+					out[i] = row[n-1-i]
+				}
+				continue
+			}
+			first := p0 - n + 1
+			for i := range out {
+				if p := p0 - i; smask[p>>3]&(1<<uint(p&7)) != 0 {
+					out[i] = row[p-first]
+				}
+			}
+			continue
+		}
 		for i := range out {
 			p := p0 - i
 			if !opaque && smask[p>>3]&(1<<uint(p&7)) == 0 {
@@ -640,10 +718,7 @@ func opaqueRow(dst *Buffer, di int, src *Buffer, si, n int) {
 	if data := src.Data; data == nil {
 		copyPixels(out, src.Pixels[si:si+n])
 	} else {
-		data = data[2*si : 2*(si+n)]
-		for i := range out {
-			out[i] = uint16(data[2*i]) | uint16(data[2*i+1])<<8
-		}
+		readPixels(out, data, si)
 	}
 	// An opaque destination's mask bits are already set.
 	if !dst.Opaque {
@@ -656,9 +731,13 @@ func maskedRow(dst *Buffer, di int, src *Buffer, si, n int, blend Blend) {
 	mask, pix, data, dmask := src.Mask, src.Pixels, src.Data, dst.Mask
 	// An opaque destination's mask bits are already set.
 	marking := !dst.Opaque && dmask != nil
-	if data == nil && blend != Copy {
+	if blend != Copy {
 		// Only shown pixels are written, so the mask is read a byte, eight
 		// pixels, at a time: a clear byte is skipped and a full one copied.
+		if data != nil {
+			maskedData(out, di, src, si, n, dmask, marking)
+			return
+		}
 		pix = pix[si : si+n]
 		for i := 0; i < n; {
 			p := si + i
@@ -712,6 +791,49 @@ func maskedRow(dst *Buffer, di int, src *Buffer, si, n int, blend Blend) {
 			q := di + i
 			dmask[q>>3] |= 1 << uint(q&7)
 		}
+	}
+}
+
+// maskedData is maskedRow's byte-at-a-time loop for an image in flash, whose
+// pixels are read as 16-bit words when the data is aligned.
+func maskedData(out []uint16, di int, src *Buffer, si, n int, dmask []byte, marking bool) {
+	mask, data := src.Mask, src.Data
+	aligned := uintptr(unsafe.Pointer(&data[0]))&1 == 0
+	for i := 0; i < n; {
+		p := si + i
+		k := min(8-p&7, n-i)
+		full := byte(1<<uint(k) - 1)
+		m := mask[p>>3] >> uint(p&7) & full
+		if m == 0 {
+			i += k
+			continue
+		}
+		o := out[i : i+k]
+		switch {
+		case m == full && aligned:
+			for j := range o {
+				o[j] = *(*uint16)(unsafe.Pointer(&data[2*(p+j)]))
+			}
+		case m == full:
+			for j := range o {
+				o[j] = uint16(data[2*(p+j)]) | uint16(data[2*(p+j)+1])<<8
+			}
+		default:
+			for j, b := 0, m; b != 0; j, b = j+1, b>>1 {
+				if b&1 != 0 {
+					o[j] = uint16(data[2*(p+j)]) | uint16(data[2*(p+j)+1])<<8
+				}
+			}
+		}
+		if marking {
+			for j := 0; m != 0; j, m = j+1, m>>1 {
+				if m&1 != 0 {
+					q := di + i + j
+					dmask[q>>3] |= 1 << uint(q&7)
+				}
+			}
+		}
+		i += k
 	}
 }
 

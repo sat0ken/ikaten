@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	ebiten "github.com/sat0ken/ikaten"
 	"github.com/sat0ken/ikaten/games/kart/course"
 )
 
@@ -98,4 +99,33 @@ func TestLapsCountForward(t *testing.T) {
 	if k.lap != 0 {
 		t.Fatalf("backward crossing: lap %d", k.lap)
 	}
+}
+
+// Drawing a frame allocates nothing: on the title, in the countdown, racing
+// with a drift and a boost, and at the finish.
+func TestDrawAllocs(t *testing.T) {
+	screen := ebiten.NewImage(ScreenWidth, ScreenHeight)
+	g := NewGame()
+	check := func(name string) {
+		t.Helper()
+		g.Draw(screen)
+		if n := testing.AllocsPerRun(5, func() { g.ticks++; g.Draw(screen) }); n != 0 {
+			t.Errorf("%s: %v allocations", name, n)
+		}
+	}
+	check("title")
+	g.setMode(modeCountdown)
+	check("countdown")
+	g.setMode(modeRace)
+	for range 200 {
+		g.raceTicks++
+		g.step(true)
+		g.follow(0.25)
+	}
+	k := &g.karts[0]
+	k.drift, k.charge, k.boost = 1, 80, 10
+	check("race")
+	g.setMode(modeResult)
+	g.modeTicks = 100
+	check("result")
 }

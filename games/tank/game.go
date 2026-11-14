@@ -3,7 +3,7 @@
 // the sides and rear, shells drop with range so the gun is laid with the
 // sight's range marks, and houses and trees stop shells and hide tanks. The
 // hull and the turret turn separately. It uses only the Ebitengine API, so it
-// also builds with Ebitengine.
+// also builds with Ebitengine. It draws at 240x240.
 //
 // The world is package field's: flat, in meters, x to the east and y to the
 // south. Bearings are radians clockwise from north.
@@ -18,13 +18,13 @@ import (
 )
 
 const (
-	ScreenWidth  = 120
-	ScreenHeight = 120
+	ScreenWidth  = 240
+	ScreenHeight = 240
 	centerX      = field.SightX // the gun's axis on screen
 	centerY      = field.SightY
-	focalWide    = 104 // pixels per radian: about 60 degrees across
-	focalZoom    = 832 // eight times
-	eyeHeight    = 2.3 // the sight and the gun, in meters above the ground
+	focalWide    = 208  // pixels per radian: about 60 degrees across
+	focalZoom    = 1664 // eight times
+	eyeHeight    = 2.3  // the sight and the gun, in meters above the ground
 	farthest     = 1500
 
 	shellSpeed = 10     // meters per tick
@@ -212,16 +212,18 @@ type Game struct {
 	shells  [maxShells]shell
 	puffs   [maxPuffs]puff
 
-	// Drawing state: the camera and the cached screen rows.
+	// Drawing state.
 	cam     camera
 	items   [maxItems]drawItem
-	rows    [ScreenHeight]*ebiten.Image
-	rowsOf  *ebiten.Image
 	ranging int // the range under the reticle in meters, or 0
+	art     *sprites
+	filled  *ebiten.Image // the screen filled whole, so opaque
 }
 
 func NewGame() *Game {
-	g := &Game{rng: 2463534242}
+	// Draw covers the whole screen anyway.
+	ebiten.SetScreenClearedEveryFrame(false)
+	g := &Game{rng: 2463534242, art: newSprites()}
 	g.newBattle(2)
 	return g
 }
@@ -452,7 +454,7 @@ func (g *Game) aim(left, right, up, down bool) {
 	}
 	// In pixels of the zoomed sight per tick.
 	g.elevHeld++
-	rate := (0.2 + float32(min(g.elevHeld, 40))/40*1.3) / focalZoom
+	rate := (0.4 + float32(min(g.elevHeld, 40))/40*2.6) / focalZoom
 	g.elev = min(max(g.elev+float32(lift)*rate, minElev), maxElev)
 }
 
