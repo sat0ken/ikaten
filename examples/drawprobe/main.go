@@ -55,6 +55,7 @@ func main() {
 	// Time to open the monitor after flashing.
 	time.Sleep(3 * time.Second)
 	println("name,iterations,us_per_op")
+	arithmetic()
 	loops()
 	green := pixel(color.RGBA{90, 190, 80, 255})
 	var o ebiten.DrawImageOptions

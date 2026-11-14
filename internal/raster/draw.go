@@ -42,8 +42,8 @@ func draw(dst, src View, o Options, forceGeneral bool) {
 		return
 	}
 	if !forceGeneral && o.B == 0 && o.C == 0 && src.Bounds.Dx() == 1 && o.A >= 1 && o.A <= 64 && o.A == float32(int(o.A)) &&
-		o.TX >= -1e7 && o.TX <= 1e7 && o.TX == float32(int(o.TX)) && o.D > 1e-6 && o.D <= 32767 && o.TY >= -1e7 && o.TY <= 1e7 &&
-		o.Alpha == 256 && o.Blend != Lighter {
+		o.TX >= -1e7 && o.TX <= 1e7 && o.TX == float32(int(o.TX)) && o.D > 1e-3 && o.TY > -8192 && o.TY < 8192 &&
+		float32(src.Bounds.Dy())*o.D < 8192 && o.Alpha == 256 && o.Blend != Lighter {
 		column(dst, src, o)
 		return
 	}
@@ -572,7 +572,7 @@ func mirrored(dst, src View, o Options) {
 // raycaster's wall. The rows of each source pixel, those whose centers fall
 // within it, are worked out once and written as a run, where the scaled
 // path worked out every row. Sampling can differ from the general path only
-// where a row's center falls within float32 rounding of a texel's edge.
+// where a row's center falls within 1/65536 of a texel's edge.
 func column(dst, src View, o Options) {
 	tx := int(o.TX)
 	x0, x1 := max(dst.Bounds.Min.X, tx), min(dst.Bounds.Max.X, tx+int(o.A))
@@ -588,10 +588,16 @@ func column(dst, src View, o Options) {
 	tinted := o.R != 256 || o.G != 256 || o.Blue != 256
 	ymin, ymax := dst.Bounds.Min.Y, dst.Bounds.Max.Y
 	h := src.Bounds.Dy()
-	// Row y's center samples texel t where t*D <= y+0.5-TY < (t+1)*D.
-	top := ceilInt(o.TY - 0.5)
+	// Row y's center samples texel t where t*D <= y+0.5-TY < (t+1)*D. The
+	// edges t*D+TY-0.5 are stepped through in 16.16 fixed point: float32
+	// arithmetic in the loop cost about a microsecond a texel on the badge.
+	// The checks in draw keep them within int32.
+	step := int32(o.D*65536 + 0.5)
+	edge := int32((o.TY-0.5)*65536 + 0.5)
+	top := int((edge + 0xffff) >> 16) // rounded up
 	for t := range h {
-		next := ceilInt(float32(t+1)*o.D + o.TY - 0.5)
+		edge += step
+		next := int((edge + 0xffff) >> 16)
 		a, b := max(top, ymin), min(next, ymax)
 		top = next
 		if a >= b {
@@ -627,15 +633,6 @@ func column(dst, src View, o Options) {
 			}
 		}
 	}
-}
-
-// ceilInt rounds up to a whole number, for either sign.
-func ceilInt(f float32) int {
-	i := int(f)
-	if float32(i) < f {
-		i++
-	}
-	return i
 }
 
 func opaqueRow(dst *Buffer, di int, src *Buffer, si, n int) {
