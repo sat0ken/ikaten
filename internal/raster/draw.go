@@ -527,16 +527,21 @@ func integer(dst, src View, o Options) {
 			dmask := db.Mask
 			marking := !db.Opaque && dmask != nil
 			out := dpix[di : di+n]
+			rowPix, rowMask, rowData, rowSi := spix, smask, sdata, si
+			if columns := (x1-1-tx)/sx - firstColumn + 1; sdata != nil && columns <= flashChunk {
+				b, base := loadFlash(sb, si+firstColumn, columns)
+				rowPix, rowMask, rowData, rowSi = b.Pixels, b.Mask, nil, base-firstColumn
+			}
 			column, i := firstColumn, 0
 			for run := sx - firstRepeat; i < n; column, run = column+1, sx {
 				end := min(n, i+run)
-				p := si + column
-				if smask[p>>3]&(1<<uint(p&7)) != 0 {
+				p := rowSi + column
+				if rowMask[p>>3]&(1<<uint(p&7)) != 0 {
 					var v uint16
-					if sdata != nil {
-						v = uint16(sdata[2*p]) | uint16(sdata[2*p+1])<<8
+					if rowData != nil {
+						v = uint16(rowData[2*p]) | uint16(rowData[2*p+1])<<8
 					} else {
-						v = spix[p]
+						v = rowPix[p]
 					}
 					for j := i; j < end; j++ {
 						out[j] = v
@@ -606,6 +611,24 @@ func mirrored(dst, src View, o Options) {
 		p0 := src.Offset + (y-ty)/sy*src.Stride + tx - x0 - 1
 		di := dst.Index(x0, y)
 		out := dpix[di : di+n]
+		if sdata == nil && o.Blend != Copy && !marking {
+			// From RAM onto an opaque screen: the source row is walked
+			// backward with nothing but its mask to check.
+			row := spix[p0-n+1 : p0+1]
+			if opaque {
+				for i := range out {
+					out[i] = row[n-1-i]
+				}
+				continue
+			}
+			first := p0 - n + 1
+			for i := range out {
+				if p := p0 - i; smask[p>>3]&(1<<uint(p&7)) != 0 {
+					out[i] = row[p-first]
+				}
+			}
+			continue
+		}
 		for i := range out {
 			p := p0 - i
 			if !opaque && smask[p>>3]&(1<<uint(p&7)) == 0 {
@@ -701,10 +724,7 @@ func opaqueRow(dst *Buffer, di int, src *Buffer, si, n int) {
 	if data := src.Data; data == nil {
 		copyPixels(out, src.Pixels[si:si+n])
 	} else {
-		data = data[2*si : 2*(si+n)]
-		for i := range out {
-			out[i] = uint16(data[2*i]) | uint16(data[2*i+1])<<8
-		}
+		readPixels(out, data, si)
 	}
 	// An opaque destination's mask bits are already set.
 	if !dst.Opaque {
@@ -721,7 +741,11 @@ func maskedRow(dst *Buffer, di int, src *Buffer, si, n int, blend Blend) {
 		// Only shown pixels are written, so the mask is read a byte, eight
 		// pixels, at a time: a clear byte is skipped and a full one copied.
 		if data != nil {
-			maskedData(out, di, src, si, n, dmask, marking)
+			for off := 0; off < n; off += flashChunk {
+				k := min(flashChunk, n-off)
+				b, base := loadFlash(src, si+off, k)
+				maskedRow(dst, di+off, b, base, k, blend)
+			}
 			return
 		}
 		pix = pix[si : si+n]
@@ -777,49 +801,6 @@ func maskedRow(dst *Buffer, di int, src *Buffer, si, n int, blend Blend) {
 			q := di + i
 			dmask[q>>3] |= 1 << uint(q&7)
 		}
-	}
-}
-
-// maskedData is maskedRow's byte-at-a-time loop for an image in flash, whose
-// pixels are read as 16-bit words when the data is aligned.
-func maskedData(out []uint16, di int, src *Buffer, si, n int, dmask []byte, marking bool) {
-	mask, data := src.Mask, src.Data
-	aligned := uintptr(unsafe.Pointer(&data[0]))&1 == 0
-	for i := 0; i < n; {
-		p := si + i
-		k := min(8-p&7, n-i)
-		full := byte(1<<uint(k) - 1)
-		m := mask[p>>3] >> uint(p&7) & full
-		if m == 0 {
-			i += k
-			continue
-		}
-		o := out[i : i+k]
-		switch {
-		case m == full && aligned:
-			for j := range o {
-				o[j] = *(*uint16)(unsafe.Pointer(&data[2*(p+j)]))
-			}
-		case m == full:
-			for j := range o {
-				o[j] = uint16(data[2*(p+j)]) | uint16(data[2*(p+j)+1])<<8
-			}
-		default:
-			for j, b := 0, m; b != 0; j, b = j+1, b>>1 {
-				if b&1 != 0 {
-					o[j] = uint16(data[2*(p+j)]) | uint16(data[2*(p+j)+1])<<8
-				}
-			}
-		}
-		if marking {
-			for j := 0; m != 0; j, m = j+1, m>>1 {
-				if m&1 != 0 {
-					q := di + i + j
-					dmask[q>>3] |= 1 << uint(q&7)
-				}
-			}
-		}
-		i += k
 	}
 }
 
