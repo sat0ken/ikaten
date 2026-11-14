@@ -2,13 +2,32 @@ package uboat
 
 import (
 	"image"
+	"image/color"
 	"math"
 
 	ebiten "github.com/sat0ken/ikaten"
-	"github.com/sat0ken/ikaten/ebitenutil"
+	"github.com/sat0ken/ikaten/games/pixtext"
 )
 
+var (
+	textWhite  = color.RGBA{240, 240, 240, 255}
+	textYellow = color.RGBA{255, 220, 40, 255}
+	textGreen  = color.RGBA{60, 200, 110, 255}
+	textGray   = color.RGBA{150, 156, 166, 255}
+	textRed    = color.RGBA{240, 70, 50, 255}
+	textShadow = color.RGBA{0, 0, 0, 255}
+)
+
+var text pixtext.Line
+
 func (g *Game) Draw(screen *ebiten.Image) {
+	if g.filled != screen {
+		// Filling the whole screen marks it opaque, after which drawing on
+		// it need not mark what it covers. Every frame covers all of it in
+		// any case, so it is done once and the screen is not cleared.
+		screen.Fill(color.RGBA{0, 0, 0, 255})
+		g.filled = screen
+	}
 	scope := g.up
 	if g.moving > 0 {
 		scope = true // the view shows while the periscope moves
@@ -16,6 +35,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if g.mode == modeTitle || g.mode == modeOver {
 		scope = true
 	}
+	mark(0)
 	if scope {
 		g.drawScope(screen)
 		if g.moving > 0 {
@@ -24,12 +44,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			if !g.up {
 				shown = moveTicks - g.moving
 			}
-			fillRect(screen, imageBlack, 0, 0, ScreenWidth, ScreenHeight-shown*ScreenHeight/moveTicks)
+			fillRect(screen, g.art.black, 0, 0, ScreenWidth, ScreenHeight-shown*ScreenHeight/moveTicks)
 		}
 	} else {
 		g.drawSonar(screen)
+		mark(1)
+		mark(2)
 	}
+	mark(3)
 	g.drawHUD(screen)
+	mark(4)
 }
 
 // shakeOffset jolts the view after a nearby depth charge. It does not use the
@@ -38,7 +62,7 @@ func (g *Game) shakeOffset() (int, int) {
 	if g.shake == 0 {
 		return 0, 0
 	}
-	return g.ticks*7%5 - 2, g.ticks*3%5 - 2
+	return (g.ticks*7%5 - 2) * 2, (g.ticks*3%5 - 2) * 2
 }
 
 // pxPerRad converts angles to screen pixels for the current magnification.
@@ -55,21 +79,32 @@ func (g *Game) waterline(dist float32) float32 {
 	return horizon + eyeHeight*g.pxPerRad()/max(dist, 1)
 }
 
-func (g *Game) drawScope(screen *ebiten.Image) {
+// clip returns the screen above row y, for drawing a ship that stands in the
+// sea at that row.
+func (g *Game) clip(screen *ebiten.Image, y int) *ebiten.Image {
 	if g.clipsOf != screen {
 		// SubImage allocates, so the clips are cut once per screen image.
-		for y := 1; y <= ScreenHeight; y++ {
-			g.clips[y] = screen.SubImage(image.Rect(0, 0, ScreenWidth, y)).(*ebiten.Image)
+		for i := range g.clips {
+			g.clips[i] = screen.SubImage(image.Rect(0, 0, ScreenWidth, clipTop+i)).(*ebiten.Image)
 		}
 		g.clipsOf = screen
 	}
+	if y < clipTop || y > ScreenHeight {
+		return screen
+	}
+	return g.clips[y-clipTop]
+}
+
+func (g *Game) drawScope(screen *ebiten.Image) {
+	a := g.art
 	ox, oy := g.shakeOffset()
-	fillRect(screen, imageSky, 0, 0, ScreenWidth, horizon+oy)
-	fillRect(screen, imageSea, 0, horizon+oy, ScreenWidth, ScreenHeight-horizon-oy)
+	fillRect(screen, a.sky, 0, 0, ScreenWidth, horizon+oy)
+	fillRect(screen, a.sea, 0, horizon+oy, ScreenWidth, ScreenHeight-horizon-oy)
 	// The sky and the sea slide with the bearing, the sea faster for depth.
 	shift := int(g.bearing * g.pxPerRad())
-	tile(screen, imageClouds, -shift/3+ox, 8+oy)
-	tile(screen, imageWaves, -shift+ox, horizon+oy)
+	tile(screen, a.clouds, -shift/3+ox, 16+oy)
+	tile(screen, a.waves, -shift+ox, horizon+oy)
+	mark(1)
 
 	// Ships far to near, so that near ones cover far ones.
 	n := 0
@@ -93,8 +128,10 @@ func (g *Game) drawScope(screen *ebiten.Image) {
 			continue
 		}
 		if x, ok := g.project(bearingTo(g.rel(t.x, t.y))); ok {
-			y := g.waterline(hypot(g.rel(t.x, t.y))) + 1
-			fillRect(screen, imageWhite, int(x)-1+ox, int(y)+oy, 3, 1)
+			// The torpedo's wake: a white streak on the water.
+			y := g.waterline(hypot(g.rel(t.x, t.y))) + 2
+			fillRect(screen, a.white, int(x)-3+ox, int(y)+oy, 7, 1)
+			fillRect(screen, a.white, int(x)-1+ox, int(y)+1+oy, 3, 1)
 		}
 	}
 	for _, c := range g.charges {
@@ -102,8 +139,8 @@ func (g *Game) drawScope(screen *ebiten.Image) {
 			// A water column rises over an exploded depth charge.
 			if x, ok := g.project(bearingTo(g.rel(c.x, c.y))); ok {
 				d := hypot(g.rel(c.x, c.y))
-				scale := min(max(40/max(d, 1)*g.pxPerRad()/float32(imageSplash.Bounds().Dy()), 0.3), 6)
-				drawScaled(screen, imageSplash, x+float32(ox), g.waterline(d)+float32(oy), scale)
+				scale := min(max(40/max(d, 1)*g.pxPerRad()/float32(a.splash.Bounds().Dy()), 0.3), 6)
+				drawScaled(screen, a.splash, x+float32(ox), g.waterline(d)+float32(oy), scale)
 			}
 		}
 	}
@@ -113,14 +150,15 @@ func (g *Game) drawScope(screen *ebiten.Image) {
 		}
 		if x, ok := g.project(bearingTo(g.rel(b.x, b.y))); ok && b.age%6 < 4 {
 			d := hypot(g.rel(b.x, b.y))
-			scale := min(max(30/max(d, 1)*g.pxPerRad()/float32(imageFire.Bounds().Dy()), 0.4), 6)
-			drawScaled(screen, imageFire, x+float32(ox), g.waterline(d)+float32(oy), scale)
+			scale := min(max(30/max(d, 1)*g.pxPerRad()/float32(a.fire.Bounds().Dy()), 0.4), 6)
+			drawScaled(screen, a.fire, x+float32(ox), g.waterline(d)+float32(oy), scale)
 		}
 	}
 	if g.mode == modePlay {
 		g.drawReticle(screen)
 	}
-	drawAt(screen, imageMask, 0, 0)
+	mark(2)
+	drawAt(screen, a.mask, 0, 0)
 }
 
 // tile draws a repeating strip shifted by x.
@@ -149,7 +187,7 @@ func (g *Game) drawShip(screen *ebiten.Image, s *ship, ox, oy float32) {
 	aspect, _ := sincos(angleDiff(s.heading, brg))
 	length := (t.length*abs(aspect) + beam*(1-abs(aspect))) / d * g.pxPerRad()
 	height := t.height / d * g.pxPerRad()
-	img := imageShip[s.kind]
+	img := g.art.ship[s.kind]
 	b := img.Bounds()
 	sx, sy := length/float32(b.Dx()), height/float32(b.Dy())
 	water := g.waterline(d) + oy
@@ -167,54 +205,59 @@ func (g *Game) drawShip(screen *ebiten.Image, s *ship, ox, oy float32) {
 		op.GeoM.Scale(float64(sx), float64(sy))
 	}
 	op.GeoM.Translate(float64(left), float64(top))
-	clip := screen
-	if row := int(water + 1); row >= 1 && row <= ScreenHeight {
-		clip = g.clips[row]
-	}
+	clip := g.clip(screen, int(water+1))
 	clip.DrawImage(img, &op)
 	if s.sink > 0 && s.sink < sinkTicks*2/3 {
-		scale := min(max(height/float32(imageSmoke.Bounds().Dy()), 0.4), 5)
+		smoke := g.art.smoke
+		scale := min(max(height/float32(smoke.Bounds().Dy()), 0.4), 5)
 		rise := float32(s.sink%40) * height / 40
-		drawScaled(clip, imageSmoke, x+ox, top-rise, scale)
+		drawScaled(clip, smoke, x+ox, top-rise, scale)
 	}
 }
 
 func (g *Game) drawReticle(screen *ebiten.Image) {
+	a := g.art
 	// A vertical line with a gap at the horizon, and bearing ticks every 5
-	// degrees, longer every 10.
-	fillRect(screen, imageBlack, ScreenWidth/2, 14, 1, horizon-18)
-	fillRect(screen, imageBlack, ScreenWidth/2, horizon+4, 1, 32)
+	// degrees, longer every 10, with a finer tick between when zoomed.
+	fillRect(screen, a.black, ScreenWidth/2, 28, 1, horizon-36)
+	fillRect(screen, a.black, ScreenWidth/2, horizon+8, 1, 64)
+	fillRect(screen, a.black, ScreenWidth/2-6, horizon+40, 13, 1)
 	step := float32(5 * math.Pi / 180)
+	if g.zoomed {
+		step /= 5
+	}
 	first := float32(math.Ceil(float64((g.bearing-g.view()/2)/step))) * step
-	for a := first; a < g.bearing+g.view()/2; a += step {
-		x, _ := g.project(a)
-		h := 2
-		if int(math.Round(float64(a/step)))%2 == 0 {
-			h = 4
+	for t := first; t < g.bearing+g.view()/2; t += step {
+		x, _ := g.project(t)
+		h := 3
+		if int(math.Round(float64(t/step)))%2 == 0 {
+			h = 7
 		}
-		fillRect(screen, imageBlack, int(x), horizon-h, 1, h)
+		fillRect(screen, a.black, int(x), horizon-h, 1, h)
 	}
 	if s := g.target(); s != nil {
 		if brg, ok := g.lead(s); ok {
 			if x, ok := g.project(brg); ok {
 				// The aim mark: where a torpedo fired now meets the target.
-				fillRect(screen, imageYellow, int(x)-1, horizon-9, 3, 1)
-				fillRect(screen, imageYellow, int(x), horizon-8, 1, 2)
+				fillRect(screen, a.yellow, int(x)-3, horizon-18, 7, 2)
+				fillRect(screen, a.yellow, int(x)-1, horizon-16, 3, 2)
+				fillRect(screen, a.yellow, int(x), horizon-14, 1, 3)
 			}
 		}
 	}
 }
 
 func (g *Game) drawSonar(screen *ebiten.Image) {
-	fillRect(screen, imageBlack, 0, 0, ScreenWidth, ScreenHeight)
+	a := g.art
+	fillRect(screen, a.black, 0, 0, ScreenWidth, ScreenHeight)
 	ox, oy := g.shakeOffset()
 	cx, cy := ScreenWidth/2+ox, ScreenHeight/2+oy
-	drawAt(screen, imageSonar, cx-sonarRadius, cy-sonarRadius)
+	drawAt(screen, a.sonar, cx-sonarRadius, cy-sonarRadius)
 	scale := float32(sonarRadius) / sonarRange
 	// The periscope's bearing as a dotted line.
 	s, c := sincos(g.bearing)
-	for r := float32(6); r < sonarRadius; r += 4 {
-		fillRect(screen, imageDim, cx+int(s*r), cy-int(c*r), 1, 1)
+	for r := float32(12); r < sonarRadius; r += 6 {
+		fillRect(screen, a.dim, cx+int(s*r), cy-int(c*r), 2, 2)
 	}
 	for _, sh := range g.ships {
 		x, y := g.rel(sh.x, sh.y)
@@ -224,48 +267,52 @@ func (g *Game) drawSonar(screen *ebiten.Image) {
 		if sh.kind == destroyer && g.alert && g.ticks%20 < 6 {
 			continue // an attacking destroyer blinks
 		}
-		img := imageContact[sh.kind]
+		img := a.contact[sh.kind]
 		b := img.Bounds()
 		drawAt(screen, img, cx+int(x*scale)-b.Dx()/2, cy+int(y*scale)-b.Dy()/2)
 	}
 	for _, t := range g.torps {
 		if t.alive {
 			x, y := g.rel(t.x, t.y)
-			fillRect(screen, imageWhite, cx+int(x*scale), cy+int(y*scale), 1, 1)
+			fillRect(screen, a.white, cx+int(x*scale), cy+int(y*scale), 2, 2)
 		}
 	}
 	for _, ch := range g.charges {
 		if ch.used && ch.fuse <= 0 && ch.fuse > -12 {
-			r := 1 - ch.fuse/4
+			r := 2 - ch.fuse/2
 			x, y := g.rel(ch.x, ch.y)
-			fillRect(screen, imageYellow, cx+int(x*scale)-r, cy+int(y*scale)-r, 2*r+1, 2*r+1)
+			fillRect(screen, a.yellow, cx+int(x*scale)-r, cy+int(y*scale)-r, 2*r+1, 2*r+1)
 		}
 	}
 	// The submarine with a line toward its heading, and the throttle.
-	fillRect(screen, imageGreen, cx-1, cy-1, 3, 3)
+	fillRect(screen, a.green, cx-2, cy-2, 5, 5)
 	hs, hc := sincos(g.subHeading)
-	for r := float32(3); r <= 7; r++ {
-		fillRect(screen, imageGreen, cx+int(hs*r), cy-int(hc*r), 1, 1)
+	for r := float32(5); r <= 14; r++ {
+		fillRect(screen, a.green, cx+int(hs*r), cy-int(hc*r), 1, 1)
 	}
-	name := throttleNames[g.throttle]
-	ebitenutil.DebugPrintAt(screen, name, ScreenWidth/2-len(name)*3, 100)
+	text.Reset().Str("SONAR").Draw(screen, 6, 26, 1, textGreen)
+	text.Reset().Str(throttleNames[g.throttle]).Center(screen, ScreenWidth/2, 196, 2, textGreen)
 }
 
 func (g *Game) drawHUD(screen *ebiten.Image) {
+	const mid = ScreenWidth / 2
+	a := g.art
 	switch g.mode {
 	case modeTitle:
-		ebitenutil.DebugPrintAt(screen, "IKATEN U-BOAT", 21, 32)
+		text.Reset().Str("IKATEN").Shade(textShadow).Center(screen, mid, 44, 2, textWhite)
+		text.Reset().Str("U-BOAT").Shade(textShadow).Center(screen, mid, 62, 4, textYellow)
 		if g.modeTicks/30%2 == 0 {
-			ebitenutil.DebugPrintAt(screen, "PRESS Z", 39, 70)
+			text.Reset().Str("PRESS A").Shade(textShadow).Center(screen, mid, 150, 2, textWhite)
 		}
-		ebitenutil.DebugPrintAt(screen, "<> SCOPE  ^v ZOOM", 9, 96)
-		ebitenutil.DebugPrintAt(screen, "Z FIRE  X DIVE", 18, 106)
+		text.Reset().Str("LEFT/RIGHT: TURN  UP/DOWN: ZOOM").Shade(textShadow).Center(screen, mid, 214, 1, textWhite)
+		text.Reset().Str("A: FIRE   B: DIVE").Shade(textShadow).Center(screen, mid, 226, 1, textWhite)
 		return
 	case modeOver:
-		ebitenutil.DebugPrintAt(screen, "YOUR BOAT IS LOST", 9, 30)
-		g.drawTonnage(screen, 50)
+		text.Reset().Str("YOUR BOAT").Shade(textShadow).Center(screen, mid, 50, 3, textRed)
+		text.Reset().Str("IS LOST").Shade(textShadow).Center(screen, mid, 76, 3, textRed)
+		g.drawTonnage(screen, 120)
 		if g.modeTicks > 60 {
-			ebitenutil.DebugPrintAt(screen, "PRESS Z", 39, 80)
+			text.Reset().Str("PRESS A").Shade(textShadow).Center(screen, mid, 176, 2, textWhite)
 		}
 		return
 	}
@@ -275,41 +322,51 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 	if !g.up && g.moving == 0 {
 		heading = g.subHeading
 	}
-	drawNumber(screen, int(math.Round(float64(heading*180/math.Pi)+360))%360, 3, 2, 2)
-	for i := range g.torpedoes {
-		fillRect(screen, imageWhite, ScreenWidth-3-i*3, 2, 2, 5)
+	text.Reset().Pad(int(math.Round(float64(heading*180/math.Pi)+360))%360, 3).Draw(screen, 5, 5, 2, textWhite)
+	if g.zoomed && g.up {
+		text.Reset().Str("x3").Draw(screen, 5, 24, 2, textYellow)
+	}
+	// Torpedoes left at the top right, with the reload under them.
+	for i := range torpedoes {
+		img := a.white
+		if i >= g.torpedoes {
+			img = a.gray
+		}
+		fillRect(screen, img, ScreenWidth-8-i*6, 5, 4, 12)
+		fillRect(screen, img, ScreenWidth-7-i*6, 4, 2, 1)
 	}
 	if g.reload > 0 {
-		fillRect(screen, imageGray, ScreenWidth-30, 9, 28*g.reload/reloadTicks, 1)
+		fillRect(screen, a.gray, ScreenWidth-62, 21, 58, 3)
+		fillRect(screen, a.yellow, ScreenWidth-62, 21, 58-58*g.reload/reloadTicks, 3)
 	}
 	// Hull at the bottom left, detection at the bottom right.
-	fillRect(screen, imageGray, 2, ScreenHeight-4, 24, 2)
-	fillRect(screen, imageGreen, 2, ScreenHeight-4, int(g.hull)*24/100, 2)
-	fillRect(screen, imageGray, ScreenWidth-26, ScreenHeight-4, 24, 2)
+	text.Reset().Str("HULL").Draw(screen, 4, ScreenHeight-20, 1, textGray)
+	fillRect(screen, a.gray, 4, ScreenHeight-10, 48, 5)
+	fillRect(screen, a.green, 4, ScreenHeight-10, int(g.hull)*48/100, 5)
+	text.Reset().Str("DETECT").Right(screen, ScreenWidth-4, ScreenHeight-20, 1, textGray)
+	fillRect(screen, a.gray, ScreenWidth-52, ScreenHeight-10, 48, 5)
 	if !g.alert || g.ticks%20 < 14 {
-		fillRect(screen, imageRed, ScreenWidth-26, ScreenHeight-4, int(g.detect)*24/100, 2)
-	}
-	if g.zoomed && g.up {
-		ebitenutil.DebugPrintAt(screen, "x3", 2, 6)
+		fillRect(screen, a.red, ScreenWidth-52, ScreenHeight-10, int(g.detect)*48/100, 5)
 	}
 	if g.messageTicks > 0 && g.message != msgNone && g.messageTicks%30 < 22 {
-		msg := messages[g.message]
-		ebitenutil.DebugPrintAt(screen, msg, ScreenWidth/2-len(msg)*3, 14)
+		c := textWhite
+		if g.message == msgDetected || g.message == msgCharges {
+			c = textRed
+		}
+		text.Reset().Str(messages[g.message]).Shade(textShadow).Center(screen, mid, 34, 2, c)
 	}
 	if g.mode == modeResult {
-		ebitenutil.DebugPrintAt(screen, "MISSION OVER", 24, 26)
-		g.drawTonnage(screen, 40)
+		text.Reset().Str("MISSION OVER").Shade(textShadow).Center(screen, mid, 56, 3, textYellow)
+		g.drawTonnage(screen, 92)
 		if g.modeTicks > 60 {
-			ebitenutil.DebugPrintAt(screen, "PRESS Z", 39, 76)
+			text.Reset().Str("PRESS A").Shade(textShadow).Center(screen, mid, 150, 2, textWhite)
 		}
 	}
 }
 
 func (g *Game) drawTonnage(screen *ebiten.Image, y int) {
-	ebitenutil.DebugPrintAt(screen, "TONS", 24, y-5)
-	drawNumber(screen, g.tonnage, 6, 54, y)
-	ebitenutil.DebugPrintAt(screen, "SHIPS", 24, y+5)
-	drawNumber(screen, g.sunk, 2, 54, y+10)
+	text.Reset().Str("TONS  ").Pad(g.tonnage, 6).Shade(textShadow).Center(screen, ScreenWidth/2, y, 2, textWhite)
+	text.Reset().Str("SHIPS     ").Pad(g.sunk, 2).Shade(textShadow).Center(screen, ScreenWidth/2, y+20, 2, textWhite)
 }
 
 func drawAt(screen, img *ebiten.Image, x, y int) {
@@ -336,12 +393,4 @@ func fillRect(screen, pixel *ebiten.Image, x, y, width, height int) {
 	op.GeoM.Scale(float64(width), float64(height))
 	op.GeoM.Translate(float64(x), float64(y))
 	screen.DrawImage(pixel, &op)
-}
-
-// drawNumber draws n with the given number of digits, padded with zeros.
-func drawNumber(screen *ebiten.Image, n, digits, x, y int) {
-	for i := digits - 1; i >= 0; i-- {
-		drawAt(screen, imageDigits[n%10], x+i*4, y)
-		n /= 10
-	}
 }

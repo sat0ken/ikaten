@@ -711,9 +711,13 @@ func maskedRow(dst *Buffer, di int, src *Buffer, si, n int, blend Blend) {
 	mask, pix, data, dmask := src.Mask, src.Pixels, src.Data, dst.Mask
 	// An opaque destination's mask bits are already set.
 	marking := !dst.Opaque && dmask != nil
-	if data == nil && blend != Copy {
+	if blend != Copy {
 		// Only shown pixels are written, so the mask is read a byte, eight
 		// pixels, at a time: a clear byte is skipped and a full one copied.
+		if data != nil {
+			maskedData(out, di, src, si, n, dmask, marking)
+			return
+		}
 		pix = pix[si : si+n]
 		for i := 0; i < n; {
 			p := si + i
@@ -767,6 +771,49 @@ func maskedRow(dst *Buffer, di int, src *Buffer, si, n int, blend Blend) {
 			q := di + i
 			dmask[q>>3] |= 1 << uint(q&7)
 		}
+	}
+}
+
+// maskedData is maskedRow's byte-at-a-time loop for an image in flash, whose
+// pixels are read as 16-bit words when the data is aligned.
+func maskedData(out []uint16, di int, src *Buffer, si, n int, dmask []byte, marking bool) {
+	mask, data := src.Mask, src.Data
+	aligned := uintptr(unsafe.Pointer(&data[0]))&1 == 0
+	for i := 0; i < n; {
+		p := si + i
+		k := min(8-p&7, n-i)
+		full := byte(1<<uint(k) - 1)
+		m := mask[p>>3] >> uint(p&7) & full
+		if m == 0 {
+			i += k
+			continue
+		}
+		o := out[i : i+k]
+		switch {
+		case m == full && aligned:
+			for j := range o {
+				o[j] = *(*uint16)(unsafe.Pointer(&data[2*(p+j)]))
+			}
+		case m == full:
+			for j := range o {
+				o[j] = uint16(data[2*(p+j)]) | uint16(data[2*(p+j)+1])<<8
+			}
+		default:
+			for j, b := 0, m; b != 0; j, b = j+1, b>>1 {
+				if b&1 != 0 {
+					o[j] = uint16(data[2*(p+j)]) | uint16(data[2*(p+j)+1])<<8
+				}
+			}
+		}
+		if marking {
+			for j := 0; m != 0; j, m = j+1, m>>1 {
+				if m&1 != 0 {
+					q := di + i + j
+					dmask[q>>3] |= 1 << uint(q&7)
+				}
+			}
+		}
+		i += k
 	}
 }
 

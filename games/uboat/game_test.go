@@ -4,6 +4,8 @@ import (
 	"image"
 	"math"
 	"testing"
+
+	ebiten "github.com/sat0ken/ikaten"
 )
 
 func playing() *Game {
@@ -241,18 +243,56 @@ func TestMovingDodgesDepthCharges(t *testing.T) {
 
 // The assets drawn by assets/gen.go match the constants it copies.
 func TestAssetSizes(t *testing.T) {
+	a := NewGame().art
 	for _, c := range []struct {
 		name string
 		w, h int
 		got  interface{ Bounds() image.Rectangle }
 	}{
-		{"mask", ScreenWidth, ScreenHeight, imageMask},
-		{"waves", stripWidth, ScreenHeight - horizon, imageWaves},
-		{"clouds", stripWidth, imageClouds.Bounds().Dy(), imageClouds},
-		{"sonar", 2*sonarRadius + 1, 2*sonarRadius + 1, imageSonar},
+		{"mask", ScreenWidth, ScreenHeight, a.mask},
+		{"waves", stripWidth, ScreenHeight - horizon, a.waves},
+		{"clouds", stripWidth, a.clouds.Bounds().Dy(), a.clouds},
+		{"sonar", 2*sonarRadius + 1, 2*sonarRadius + 1, a.sonar},
 	} {
 		if b := c.got.Bounds(); b.Dx() != c.w || b.Dy() != c.h {
 			t.Fatalf("%s is %dx%d, want %dx%d; run go generate", c.name, b.Dx(), b.Dy(), c.w, c.h)
 		}
 	}
+}
+
+// Drawing allocates nothing once the clips are cut, in every view.
+func TestDrawAllocs(t *testing.T) {
+	screen := ebiten.NewImage(ScreenWidth, ScreenHeight)
+	g := NewGame()
+	check := func(name string) {
+		t.Helper()
+		g.Draw(screen)
+		if n := testing.AllocsPerRun(5, func() { g.ticks++; g.Draw(screen) }); n != 0 {
+			t.Errorf("%s: %v allocations", name, n)
+		}
+	}
+	check("title")
+	g.newCampaign()
+	g.setMode(modePlay)
+	for range 900 {
+		g.step()
+	}
+	g.drop(g.ships[0].x, g.ships[0].y)
+	g.addBlast(g.ships[1].x, g.ships[1].y)
+	g.fire()
+	g.say(msgHit)
+	g.shake = 10
+	check("scope")
+	g.zoomed = true
+	check("zoomed")
+	g.up = false
+	check("sonar")
+	g.moving = moveTicks / 2
+	check("moving")
+	g.setMode(modeResult)
+	g.modeTicks = 100
+	check("result")
+	g.setMode(modeOver)
+	g.modeTicks = 100
+	check("over")
 }
