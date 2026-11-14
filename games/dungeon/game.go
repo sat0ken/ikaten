@@ -89,16 +89,19 @@ type Game struct {
 	zbuf           [ScreenWidth]float32
 	order          [maxSlimes]int
 	art            *sprites
+	filled         *ebiten.Image // the screen filled whole, so opaque
 }
 
 func NewGame() *Game {
+	// Draw covers the whole screen anyway.
+	ebiten.SetScreenClearedEveryFrame(false)
 	g := &Game{art: newSprites()}
 	g.reset()
 	return g
 }
 
 func (g *Game) reset() {
-	*g = Game{mode: g.mode, art: g.art}
+	*g = Game{mode: g.mode, art: g.art, filled: g.filled}
 	g.hp = 100
 	g.dirX, g.dirY = 1, 0
 	g.planeX, g.planeY = 0, planeLength

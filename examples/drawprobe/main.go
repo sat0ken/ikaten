@@ -6,6 +6,7 @@
 package main
 
 import (
+	"image"
 	"image/color"
 	"time"
 
@@ -84,6 +85,26 @@ func main() {
 	op("ridge_180x63_half", 200, func() { at(ridge, 1, 0.5, 10, 100) })
 	op("ridge_180x63_flipped_half", 200, func() { at(ridge, 1, -0.5, 10, 100) })
 	op("ridge_180x63_third", 200, func() { at(ridge, 1, 1.0/3, 10, 100) })
+	// A raycaster's wall: a one-pixel column of a texture stretched to the
+	// wall's height, darkened with a color scale for the distance.
+	tex := shape(32, 32, true)
+	col := tex.SubImage(image.Rect(5, 0, 6, 32)).(*ebiten.Image)
+	tinted := func(sx, sy float64) {
+		o.GeoM.Reset()
+		o.GeoM.Scale(sx, sy)
+		o.GeoM.Translate(100, 20)
+		o.ColorScale.Reset()
+		o.ColorScale.Scale(0.7, 0.7, 0.7, 1)
+		screen.DrawImage(col, &o)
+		o.ColorScale.Reset()
+	}
+	op("wallcol_150_plain", 1000, func() { at(col, 1, 150.0/32, 100, 20) })
+	op("wallcol_150_tinted", 1000, func() { tinted(1, 150.0/32) })
+	op("wallcol_20_tinted", 1000, func() { tinted(1, 20.0/32) })
+	op("wallcol_2x150_tinted", 1000, func() { tinted(2, 150.0/32) })
+	screen.Clear() // not opaque: every pixel drawn marks the mask too
+	op("wallcol_150_tinted_cleared", 1000, func() { tinted(1, 150.0/32) })
+	screen.Fill(color.RGBA{100, 170, 240, 255})
 	var line pixtext.Line
 	white := color.RGBA{250, 250, 250, 255}
 	op("text_10_chars", 500, func() { line.Reset().Str("SCORE 1234").Draw(screen, 10, 10, 1, white) })

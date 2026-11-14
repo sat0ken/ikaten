@@ -20,6 +20,13 @@ var (
 var text pixtext.Line
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	if g.filled != screen {
+		// Filling the whole screen marks it opaque, after which drawing on
+		// it need not mark what it covers. Every frame covers all of it in
+		// any case, so it is done once and the screen is not cleared.
+		screen.Fill(color.RGBA{0, 0, 0, 255})
+		g.filled = screen
+	}
 	// The ceiling and the floor, darker toward the horizon.
 	const half = viewHeight / 2
 	mark(0)
