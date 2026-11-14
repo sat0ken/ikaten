@@ -249,8 +249,8 @@ func TestAssetSizes(t *testing.T) {
 		w, h int
 		got  interface{ Bounds() image.Rectangle }
 	}{
-		{"waves", stripWidth, ScreenHeight - horizon, a.waves},
-		{"clouds", stripWidth, a.clouds.Bounds().Dy(), a.clouds},
+		{"waves", stripWidth / 2, ScreenHeight - horizon, a.waves},
+		{"clouds", stripWidth / 2, a.clouds.Bounds().Dy(), a.clouds},
 		{"sonar", 2*sonarRadius + 1, 2*sonarRadius + 1, a.sonar},
 	} {
 		if b := c.got.Bounds(); b.Dx() != c.w || b.Dy() != c.h {

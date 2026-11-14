@@ -175,15 +175,18 @@ func (g *Game) drawScope(screen *ebiten.Image) {
 	}
 }
 
-// tile draws a repeating strip shifted by x.
+// tile draws a repeating strip shifted by x, twice as wide as it is stored.
 func tile(screen, img *ebiten.Image, x, y int) {
-	w := img.Bounds().Dx()
+	w := 2 * img.Bounds().Dx()
 	x %= w
 	if x > 0 {
 		x -= w
 	}
 	for ; x < ScreenWidth; x += w {
-		drawAt(screen, img, x, y)
+		var op ebiten.DrawImageOptions
+		op.GeoM.Scale(2, 1)
+		op.GeoM.Translate(float64(x), float64(y))
+		screen.DrawImage(img, &op)
 	}
 }
 

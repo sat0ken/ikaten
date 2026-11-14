@@ -520,9 +520,10 @@ func integer(dst, src View, o Options) {
 			if !db.Opaque {
 				db.SetMaskRange(di, n, true)
 			}
-		case plain && o.Blend != Copy && sdata == nil:
+		case plain && o.Blend != Copy:
 			// Magnified with a mask: each source pixel's bit is read once,
-			// and a shown pixel is written as a run sx wide.
+			// and a shown pixel is written as a run sx wide. From flash this
+			// also reads each pixel once, and flash reads are slow.
 			dmask := db.Mask
 			marking := !db.Opaque && dmask != nil
 			out := dpix[di : di+n]
@@ -531,7 +532,12 @@ func integer(dst, src View, o Options) {
 				end := min(n, i+run)
 				p := si + column
 				if smask[p>>3]&(1<<uint(p&7)) != 0 {
-					v := spix[p]
+					var v uint16
+					if sdata != nil {
+						v = uint16(sdata[2*p]) | uint16(sdata[2*p+1])<<8
+					} else {
+						v = spix[p]
+					}
 					for j := i; j < end; j++ {
 						out[j] = v
 					}

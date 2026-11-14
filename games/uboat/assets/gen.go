@@ -32,17 +32,22 @@ func noise(x, y int) uint32 {
 	return h ^ h>>16
 }
 
+// The strips are drawn twice as wide, so they are stored at half width:
+// flash reads are slow on the badge and this halves them. Each texel is two
+// pixels across and one down.
+const texels = stripWidth / 2
+
 // waves draws wave crests that thin out toward the horizon: a light crest
 // with a dark trough under it, longer and further apart nearer the viewer.
 func waves() image.Image {
-	img := image.NewNRGBA(image.Rect(0, 0, stripWidth, screenHeight-horizon))
+	img := image.NewNRGBA(image.Rect(0, 0, texels, screenHeight-horizon))
 	trough := color.NRGBA{30, 56, 90, 255}
 	crest, light, foam := color.NRGBA{70, 104, 140, 255}, color.NRGBA{110, 146, 180, 255}, color.NRGBA{170, 196, 220, 255}
 	for y := 0; y < screenHeight-horizon; y++ {
 		near := y * y / (screenHeight - horizon) // grows faster than y: perspective
-		length := 2 + near/5
-		gap := 16 + 120/(y+2)
-		for x := 0; x < stripWidth; {
+		length := 1 + near/10
+		gap := 8 + 60/(y+2)
+		for x := 0; x < texels; {
 			x += gap/2 + int(noise(x, y)%uint32(gap))
 			c := crest
 			switch noise(y, x) % 6 {
@@ -54,9 +59,9 @@ func waves() image.Image {
 				}
 			}
 			for i := range length {
-				img.SetNRGBA((x+i)%stripWidth, y, c)
+				img.SetNRGBA((x+i)%texels, y, c)
 				if y+1 < screenHeight-horizon && i > 0 && i < length-1 && y > 8 {
-					img.SetNRGBA((x+i)%stripWidth, y+1, trough)
+					img.SetNRGBA((x+i)%texels, y+1, trough)
 				}
 			}
 			x += length + 1
@@ -69,9 +74,9 @@ func waves() image.Image {
 // along their flat bottoms.
 func clouds() image.Image {
 	const height = 44
-	img := image.NewNRGBA(image.Rect(0, 0, stripWidth, height))
+	img := image.NewNRGBA(image.Rect(0, 0, texels, height))
 	white, shade, dark := color.NRGBA{236, 240, 246, 255}, color.NRGBA{200, 210, 224, 255}, color.NRGBA{176, 190, 208, 255}
-	// Each cloud: its center x, its base row and its half width.
+	// Each cloud: its center x on the screen, its base row and its half width.
 	for _, c := range [...][3]int{{40, 30, 34}, {150, 22, 22}, {262, 36, 44}, {380, 18, 18}, {462, 30, 30}} {
 		base, half := c[1], c[2]
 		for p := range 6 {
@@ -84,8 +89,11 @@ func clouds() image.Image {
 			}
 			cy := float64(base) - ry*0.5
 			for y := range height {
-				for x := -int(rx) - 1; x <= int(rx)+1; x++ {
-					dx, dy := float64(x)/rx, (float64(y)+.5-cy)/ry
+				for t := range texels {
+					// The texel's center on the screen, nearest copy of the puff.
+					x := float64(2*t+1) - float64(px)
+					x -= stripWidth * math.Round(x/stripWidth)
+					dx, dy := x/rx, (float64(y)+.5-cy)/ry
 					if dx*dx+dy*dy >= 1 || y > base {
 						continue
 					}
@@ -96,7 +104,7 @@ func clouds() image.Image {
 					case dy > 0.35:
 						col = shade
 					}
-					img.SetNRGBA(((px+x)%stripWidth+stripWidth)%stripWidth, y, col)
+					img.SetNRGBA(t, y, col)
 				}
 			}
 		}
