@@ -522,26 +522,20 @@ func integer(dst, src View, o Options) {
 			}
 		case plain && o.Blend != Copy:
 			// Magnified with a mask: each source pixel's bit is read once,
-			// and a shown pixel is written as a run sx wide. From flash this
-			// also reads each pixel once, and flash reads are slow.
+			// and a shown pixel is written as a run sx wide.
 			dmask := db.Mask
 			marking := !db.Opaque && dmask != nil
 			out := dpix[di : di+n]
-			rowPix, rowMask, rowData, rowSi := spix, smask, sdata, si
-			if columns := (x1-1-tx)/sx - firstColumn + 1; sdata != nil && columns <= flashChunk {
-				b, base := loadFlash(sb, si+firstColumn, columns)
-				rowPix, rowMask, rowData, rowSi = b.Pixels, b.Mask, nil, base-firstColumn
-			}
 			column, i := firstColumn, 0
 			for run := sx - firstRepeat; i < n; column, run = column+1, sx {
 				end := min(n, i+run)
-				p := rowSi + column
-				if rowMask[p>>3]&(1<<uint(p&7)) != 0 {
+				p := si + column
+				if smask[p>>3]&(1<<uint(p&7)) != 0 {
 					var v uint16
-					if rowData != nil {
-						v = uint16(rowData[2*p]) | uint16(rowData[2*p+1])<<8
+					if sdata != nil {
+						v = uint16(sdata[2*p]) | uint16(sdata[2*p+1])<<8
 					} else {
-						v = rowPix[p]
+						v = spix[p]
 					}
 					for j := i; j < end; j++ {
 						out[j] = v
@@ -741,11 +735,7 @@ func maskedRow(dst *Buffer, di int, src *Buffer, si, n int, blend Blend) {
 		// Only shown pixels are written, so the mask is read a byte, eight
 		// pixels, at a time: a clear byte is skipped and a full one copied.
 		if data != nil {
-			for off := 0; off < n; off += flashChunk {
-				k := min(flashChunk, n-off)
-				b, base := loadFlash(src, si+off, k)
-				maskedRow(dst, di+off, b, base, k, blend)
-			}
+			maskedData(out, di, src, si, n, dmask, marking)
 			return
 		}
 		pix = pix[si : si+n]
@@ -801,6 +791,49 @@ func maskedRow(dst *Buffer, di int, src *Buffer, si, n int, blend Blend) {
 			q := di + i
 			dmask[q>>3] |= 1 << uint(q&7)
 		}
+	}
+}
+
+// maskedData is maskedRow's byte-at-a-time loop for an image in flash, whose
+// pixels are read as 16-bit words when the data is aligned.
+func maskedData(out []uint16, di int, src *Buffer, si, n int, dmask []byte, marking bool) {
+	mask, data := src.Mask, src.Data
+	aligned := uintptr(unsafe.Pointer(&data[0]))&1 == 0
+	for i := 0; i < n; {
+		p := si + i
+		k := min(8-p&7, n-i)
+		full := byte(1<<uint(k) - 1)
+		m := mask[p>>3] >> uint(p&7) & full
+		if m == 0 {
+			i += k
+			continue
+		}
+		o := out[i : i+k]
+		switch {
+		case m == full && aligned:
+			for j := range o {
+				o[j] = *(*uint16)(unsafe.Pointer(&data[2*(p+j)]))
+			}
+		case m == full:
+			for j := range o {
+				o[j] = uint16(data[2*(p+j)]) | uint16(data[2*(p+j)+1])<<8
+			}
+		default:
+			for j, b := 0, m; b != 0; j, b = j+1, b>>1 {
+				if b&1 != 0 {
+					o[j] = uint16(data[2*(p+j)]) | uint16(data[2*(p+j)+1])<<8
+				}
+			}
+		}
+		if marking {
+			for j := 0; m != 0; j, m = j+1, m>>1 {
+				if m&1 != 0 {
+					q := di + i + j
+					dmask[q>>3] |= 1 << uint(q&7)
+				}
+			}
+		}
+		i += k
 	}
 }
 

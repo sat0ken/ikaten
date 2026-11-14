@@ -135,8 +135,8 @@ var splashArt = []string{
 	"sWWWWWWWWs",
 }
 
-// The sky and sea strips repeat every stripWidth pixels. They are stored at
-// half width and drawn twice as wide; see assets/gen.go.
+// The sky and sea strips repeat every stripWidth pixels. They are opaque,
+// with the sky's and the sea's colors behind; see assets/gen.go.
 const stripWidth = 512
 
 // sprites are the game's images. They belong to the Game, so that the

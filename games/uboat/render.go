@@ -99,12 +99,17 @@ func (g *Game) clip(screen *ebiten.Image, y int) *ebiten.Image {
 func (g *Game) drawScope(screen *ebiten.Image) {
 	a := g.art
 	ox, oy := g.shakeOffset()
-	fillRect(screen, a.sky, 0, 0, ScreenWidth, horizon+oy)
-	fillRect(screen, a.sea, 0, horizon+oy, ScreenWidth, ScreenHeight-horizon-oy)
+	// The strips are opaque, so only the sky above and below the clouds, and
+	// the sea under the waves when the view is shaken up, are filled.
+	const cloudsTop = 16
+	cloudsBottom := cloudsTop + a.clouds.Bounds().Dy()
+	fillRect(screen, a.sky, 0, 0, ScreenWidth, cloudsTop+oy)
+	fillRect(screen, a.sky, 0, cloudsBottom+oy, ScreenWidth, horizon-cloudsBottom)
+	fillRect(screen, a.sea, 0, ScreenHeight+oy, ScreenWidth, -oy)
+	mark(1)
 	// The sky and the sea slide with the bearing, the sea faster for depth.
 	shift := int(g.bearing * g.pxPerRad())
-	mark(1)
-	tile(screen, a.clouds, -shift/3+ox, 16+oy)
+	tile(screen, a.clouds, -shift/3+ox, cloudsTop+oy)
 	tile(screen, a.waves, -shift+ox, horizon+oy)
 	mark(2)
 
@@ -175,18 +180,15 @@ func (g *Game) drawScope(screen *ebiten.Image) {
 	}
 }
 
-// tile draws a repeating strip shifted by x, twice as wide as it is stored.
+// tile draws a repeating strip shifted by x.
 func tile(screen, img *ebiten.Image, x, y int) {
-	w := 2 * img.Bounds().Dx()
+	w := img.Bounds().Dx()
 	x %= w
 	if x > 0 {
 		x -= w
 	}
 	for ; x < ScreenWidth; x += w {
-		var op ebiten.DrawImageOptions
-		op.GeoM.Scale(2, 1)
-		op.GeoM.Translate(float64(x), float64(y))
-		screen.DrawImage(img, &op)
+		drawAt(screen, img, x, y)
 	}
 }
 
@@ -266,10 +268,15 @@ func (g *Game) drawReticle(screen *ebiten.Image) {
 
 func (g *Game) drawSonar(screen *ebiten.Image) {
 	a := g.art
-	fillRect(screen, a.black, 0, 0, ScreenWidth, ScreenHeight)
 	ox, oy := g.shakeOffset()
 	cx, cy := ScreenWidth/2+ox, ScreenHeight/2+oy
-	drawAt(screen, a.sonar, cx-sonarRadius, cy-sonarRadius)
+	// The plot is opaque on black; the rest of the screen is filled around it.
+	x0, y0, size := cx-sonarRadius, cy-sonarRadius, 2*sonarRadius+1
+	fillRect(screen, a.black, 0, 0, ScreenWidth, y0)
+	fillRect(screen, a.black, 0, y0+size, ScreenWidth, ScreenHeight-y0-size)
+	fillRect(screen, a.black, 0, y0, x0, size)
+	fillRect(screen, a.black, x0+size, y0, ScreenWidth-x0-size, size)
+	drawAt(screen, a.sonar, x0, y0)
 	scale := float32(sonarRadius) / sonarRange
 	// The periscope's bearing as a dotted line.
 	s, c := sincos(g.bearing)

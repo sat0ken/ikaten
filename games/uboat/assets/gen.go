@@ -32,22 +32,35 @@ func noise(x, y int) uint32 {
 	return h ^ h>>16
 }
 
-// The strips are drawn twice as wide, so they are stored at half width:
-// flash reads are slow on the badge and this halves them. Each texel is two
-// pixels across and one down.
-const texels = stripWidth / 2
+// The strips are opaque, with the sky's and the sea's colors behind the
+// clouds and the waves, as in art.go: on the badge a masked image costs
+// several times what an opaque one does to draw.
+var (
+	sky = color.NRGBA{150, 182, 214, 255}
+	sea = color.NRGBA{40, 70, 108, 255}
+)
+
+func fill(img *image.NRGBA, c color.NRGBA) {
+	b := img.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			img.SetNRGBA(x, y, c)
+		}
+	}
+}
 
 // waves draws wave crests that thin out toward the horizon: a light crest
 // with a dark trough under it, longer and further apart nearer the viewer.
 func waves() image.Image {
-	img := image.NewNRGBA(image.Rect(0, 0, texels, screenHeight-horizon))
+	img := image.NewNRGBA(image.Rect(0, 0, stripWidth, screenHeight-horizon))
+	fill(img, sea)
 	trough := color.NRGBA{30, 56, 90, 255}
 	crest, light, foam := color.NRGBA{70, 104, 140, 255}, color.NRGBA{110, 146, 180, 255}, color.NRGBA{170, 196, 220, 255}
 	for y := 0; y < screenHeight-horizon; y++ {
 		near := y * y / (screenHeight - horizon) // grows faster than y: perspective
-		length := 1 + near/10
-		gap := 8 + 60/(y+2)
-		for x := 0; x < texels; {
+		length := 2 + near/5
+		gap := 16 + 120/(y+2)
+		for x := 0; x < stripWidth; {
 			x += gap/2 + int(noise(x, y)%uint32(gap))
 			c := crest
 			switch noise(y, x) % 6 {
@@ -59,9 +72,9 @@ func waves() image.Image {
 				}
 			}
 			for i := range length {
-				img.SetNRGBA((x+i)%texels, y, c)
+				img.SetNRGBA((x+i)%stripWidth, y, c)
 				if y+1 < screenHeight-horizon && i > 0 && i < length-1 && y > 8 {
-					img.SetNRGBA((x+i)%texels, y+1, trough)
+					img.SetNRGBA((x+i)%stripWidth, y+1, trough)
 				}
 			}
 			x += length + 1
@@ -74,9 +87,10 @@ func waves() image.Image {
 // along their flat bottoms.
 func clouds() image.Image {
 	const height = 44
-	img := image.NewNRGBA(image.Rect(0, 0, texels, height))
+	img := image.NewNRGBA(image.Rect(0, 0, stripWidth, height))
+	fill(img, sky)
 	white, shade, dark := color.NRGBA{236, 240, 246, 255}, color.NRGBA{200, 210, 224, 255}, color.NRGBA{176, 190, 208, 255}
-	// Each cloud: its center x on the screen, its base row and its half width.
+	// Each cloud: its center x, its base row and its half width.
 	for _, c := range [...][3]int{{40, 30, 34}, {150, 22, 22}, {262, 36, 44}, {380, 18, 18}, {462, 30, 30}} {
 		base, half := c[1], c[2]
 		for p := range 6 {
@@ -89,11 +103,8 @@ func clouds() image.Image {
 			}
 			cy := float64(base) - ry*0.5
 			for y := range height {
-				for t := range texels {
-					// The texel's center on the screen, nearest copy of the puff.
-					x := float64(2*t+1) - float64(px)
-					x -= stripWidth * math.Round(x/stripWidth)
-					dx, dy := x/rx, (float64(y)+.5-cy)/ry
+				for x := -int(rx) - 1; x <= int(rx)+1; x++ {
+					dx, dy := float64(x)/rx, (float64(y)+.5-cy)/ry
 					if dx*dx+dy*dy >= 1 || y > base {
 						continue
 					}
@@ -104,7 +115,7 @@ func clouds() image.Image {
 					case dy > 0.35:
 						col = shade
 					}
-					img.SetNRGBA(t, y, col)
+					img.SetNRGBA(((px+x)%stripWidth+stripWidth)%stripWidth, y, col)
 				}
 			}
 		}
@@ -113,10 +124,11 @@ func clouds() image.Image {
 }
 
 // sonar draws the plot's rim with ticks every 30 degrees, its range rings and
-// a dotted cross.
+// a dotted cross, on black.
 func sonar() image.Image {
 	const size = 2*sonarRadius + 1
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
+	fill(img, color.NRGBA{0, 0, 0, 255})
 	ring, dim := color.NRGBA{60, 200, 110, 255}, color.NRGBA{24, 80, 48, 255}
 	for y := range size {
 		for x := range size {

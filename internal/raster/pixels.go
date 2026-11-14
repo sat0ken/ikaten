@@ -65,34 +65,8 @@ func copyPixels(dst, src []uint16) {
 	}
 }
 
-// On the badge every read from an image in flash is slow, about 0.1 µs, so
-// rows are read into RAM a 32-bit word, two pixels or four mask bytes, at a
-// time before they are drawn. flashChunk is the most pixels read at once.
-const flashChunk = 256
-
-var flashRow struct {
-	pix  [flashChunk + 8]uint16
-	mask [flashChunk/8 + 2]byte
-	buf  Buffer
-}
-
-// loadFlash reads pixels p to p+n-1 of src, n at most flashChunk, with their
-// mask bits, into flashRow. Pixel p is at the returned index of the returned
-// buffer, and keeps its bit position within its mask byte.
-func loadFlash(src *Buffer, p, n int) (*Buffer, int) {
-	base := p & 7
-	readPixels(flashRow.pix[base:base+n], src.Data, p)
-	b := &flashRow.buf
-	b.Pixels, b.Mask = flashRow.pix[:], nil
-	if src.Mask != nil {
-		first, last := p>>3, (p+n-1)>>3
-		readBytes(flashRow.mask[:last-first+1], src.Mask[first:last+1])
-		b.Mask = flashRow.mask[:]
-	}
-	return b, base
-}
-
-// readPixels reads len(out) pixels of data starting at pixel p.
+// readPixels reads len(out) pixels of an image in flash, starting at pixel p,
+// two at a time where the data is aligned.
 func readPixels(out []uint16, data []byte, p int) {
 	n := len(out)
 	if n == 0 {
@@ -121,22 +95,5 @@ func readPixels(out []uint16, data []byte, p int) {
 	}
 	if i < n {
 		out[i] = *(*uint16)(unsafe.Pointer(&in[2*i]))
-	}
-}
-
-// readBytes reads len(out) bytes of in.
-func readBytes(out, in []byte) {
-	n := len(out)
-	in = in[:n]
-	i := 0
-	for ; i < n && uintptr(unsafe.Pointer(&in[i]))&3 != 0; i++ {
-		out[i] = in[i]
-	}
-	for ; i+4 <= n; i += 4 {
-		v := *(*uint32)(unsafe.Pointer(&in[i]))
-		out[i], out[i+1], out[i+2], out[i+3] = byte(v), byte(v>>8), byte(v>>16), byte(v>>24)
-	}
-	for ; i < n; i++ {
-		out[i] = in[i]
 	}
 }

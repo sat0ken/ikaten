@@ -302,9 +302,8 @@ func TestAffineOpaqueNearlyMatchesGeneral(t *testing.T) {
 	}
 }
 
-// Rows of flash images are read into RAM in chunks before drawing; wide rows,
-// every alignment of the data and the mask, and magnified draws must match
-// the general path.
+// Rows of flash images, wide ones, at every alignment of the data and the
+// mask, at their size and magnified, must match the general path.
 func TestFlashRows(t *testing.T) {
 	const w, h = 700, 3
 	rng := rand.New(rand.NewSource(5))
