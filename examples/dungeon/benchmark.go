@@ -10,8 +10,9 @@ import (
 	"github.com/sat0ken/ikaten/games/dungeon"
 )
 
-// autoplay starts the game, walks, turns and fires on a fixed rhythm, and prints
-// timings every 10 seconds.
+// autoplay starts the game, walks, turns and fires on a fixed rhythm, and
+// prints timings every 10 seconds. It fires with Space, which boards do not
+// set from their buttons.
 type autoplay struct {
 	*dungeon.Game
 	ticks         int
@@ -23,7 +24,7 @@ type autoplay struct {
 func (g *autoplay) Update() error {
 	g.ticks++
 	t := g.ticks % 120
-	ebiten.SetKeyState(ebiten.KeyZ, t%20 == 0)
+	ebiten.SetKeyState(ebiten.KeySpace, t%20 == 0)
 	ebiten.SetKeyState(ebiten.KeyArrowUp, t < 60)
 	ebiten.SetKeyState(ebiten.KeyArrowRight, t >= 60 && t < 100)
 	now := time.Now()
@@ -39,6 +40,11 @@ func (g *autoplay) Update() error {
 		runtime.ReadMemStats(&mem)
 		if n > 0 {
 			println("frames=", n, " tps=", int(ebiten.ActualTPS()), " update_us/frame=", (current.Update-g.stats.Update).Microseconds()/int64(n), " draw_us/frame=", (current.Draw-g.stats.Draw).Microseconds()/int64(n), " present_us/frame=", (current.Present-g.stats.Present).Microseconds()/int64(n), " heap=", mem.HeapAlloc, " gc=", mem.NumGC, " longest_gap_us=", g.longestUpdate.Microseconds())
+		}
+		if n > 0 {
+			// Where Draw's time went, in microseconds a frame.
+			t := dungeon.SectionTimes()
+			println("  floor=", t[0].Microseconds()/int64(n), " walls=", t[1].Microseconds()/int64(n), " slimes=", t[2].Microseconds()/int64(n), " weapon=", t[3].Microseconds()/int64(n), " status=", t[4].Microseconds()/int64(n))
 		}
 		g.stats = current
 		g.last = now

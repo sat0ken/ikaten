@@ -41,6 +41,12 @@ func draw(dst, src View, o Options, forceGeneral bool) {
 		mirrored(dst, src, o)
 		return
 	}
+	if !forceGeneral && o.B == 0 && o.C == 0 && src.Bounds.Dx() == 1 && o.A >= 1 && o.A <= 64 && o.A == float32(int(o.A)) &&
+		o.TX >= -1e7 && o.TX <= 1e7 && o.TX == float32(int(o.TX)) && o.D > 1e-3 && o.TY > -8192 && o.TY < 8192 &&
+		float32(src.Bounds.Dy())*o.D < 8192 && o.Alpha == 256 && o.Blend != Lighter {
+		column(dst, src, o)
+		return
+	}
 	if !forceGeneral && o.B == 0 && o.C == 0 && scaled(dst, src, o) {
 		return
 	}
@@ -313,6 +319,26 @@ func affine(dst, src View, o Options) bool {
 	// An opaque destination's mask bits are already set.
 	marking := !dst.Buffer.Opaque && mask != nil
 	data, spix, smask := src.Buffer.Data, src.Buffer.Pixels, src.Buffer.Mask
+	if plain && opaque && sw == 1 && sh == 1 {
+		// A solid parallelogram, such as a band of sky: on each row the
+		// pixels that sample the one source pixel are a span, found from
+		// the same fixed-point coordinates the loop below steps through.
+		v := src.Buffer.Pixel(src.Offset)
+		n := x1 - x0
+		for y := y0; y < y1; y, rowX, rowY = y+1, rowX+stepX, rowY+stepY {
+			lo, hi := within(rowX, dx, 0, n)
+			lo, hi = within(rowY, dy, lo, hi)
+			if lo >= hi {
+				continue
+			}
+			di := dst.Index(x0, y)
+			fillPixels(pixels[di+lo:di+hi], v)
+			if marking {
+				dst.Buffer.SetMaskRange(di+lo, hi-lo, true)
+			}
+		}
+		return true
+	}
 	for y := y0; y < y1; y, rowX, rowY = y+1, rowX+stepX, rowY+stepY {
 		di := dst.Index(x0, y)
 		sx, sy := rowX, rowY
@@ -345,6 +371,45 @@ func affine(dst, src View, o Options) bool {
 		}
 	}
 	return true
+}
+
+// within narrows lo to hi to the steps i at which the 32.32 fixed-point
+// coordinate start+i*step is in the first source pixel, 0 to 1 exclusive.
+func within(start, step int64, lo, hi int) (int, int) {
+	const one = 1 << 32
+	switch {
+	case step == 0:
+		if start < 0 || start >= one {
+			return 0, 0
+		}
+		return lo, hi
+	case step > 0:
+		// start+i*step >= 0 and start+i*step <= one-1.
+		lo = max(lo, int(max(ceilDiv(-start, step), int64(lo))))
+		hi = min(hi, int(min(floorDiv(one-1-start, step)+1, int64(hi))))
+	default:
+		// start+i*step <= one-1 and start+i*step >= 0, the step negative.
+		lo = max(lo, int(max(ceilDiv(one-1-start, step), int64(lo))))
+		hi = min(hi, int(min(floorDiv(-start, step)+1, int64(hi))))
+	}
+	return lo, hi
+}
+
+// floorDiv and ceilDiv divide rounding down and up, for either sign.
+func floorDiv(a, b int64) int64 {
+	q := a / b
+	if (a%b != 0) && ((a < 0) != (b < 0)) {
+		q--
+	}
+	return q
+}
+
+func ceilDiv(a, b int64) int64 {
+	q := a / b
+	if (a%b != 0) && ((a < 0) == (b < 0)) {
+		q++
+	}
+	return q
 }
 
 // span returns the destination pixels covering start to start+length, clipped
@@ -497,6 +562,74 @@ func mirrored(dst, src View, o Options) {
 			if marking {
 				q := di + i
 				dmask[q>>3] |= 1 << uint(q&7)
+			}
+		}
+	}
+}
+
+// column draws a one-pixel-wide image stretched or shrunk down, a whole
+// number of pixels wide at a whole pixel across, at full alpha: a
+// raycaster's wall. The rows of each source pixel, those whose centers fall
+// within it, are worked out once and written as a run, where the scaled
+// path worked out every row. Sampling can differ from the general path only
+// where a row's center falls within 1/65536 of a texel's edge.
+func column(dst, src View, o Options) {
+	tx := int(o.TX)
+	x0, x1 := max(dst.Bounds.Min.X, tx), min(dst.Bounds.Max.X, tx+int(o.A))
+	if x0 >= x1 {
+		return
+	}
+	n := x1 - x0
+	db, sb := dst.Buffer, src.Buffer
+	pixels, mask, smask := db.Pixels, db.Mask, sb.Mask
+	opaque := sb.Opaque || smask == nil
+	// An opaque destination's mask bits are already set.
+	marking := !db.Opaque && mask != nil
+	tinted := o.R != 256 || o.G != 256 || o.Blue != 256
+	ymin, ymax := dst.Bounds.Min.Y, dst.Bounds.Max.Y
+	h := src.Bounds.Dy()
+	// Row y's center samples texel t where t*D <= y+0.5-TY < (t+1)*D. The
+	// edges t*D+TY-0.5 are stepped through in 16.16 fixed point: float32
+	// arithmetic in the loop cost about a microsecond a texel on the badge.
+	// The checks in draw keep them within int32.
+	step := int32(o.D*65536 + 0.5)
+	edge := int32((o.TY-0.5)*65536 + 0.5)
+	top := int((edge + 0xffff) >> 16) // rounded up
+	for t := range h {
+		edge += step
+		next := int((edge + 0xffff) >> 16)
+		a, b := max(top, ymin), min(next, ymax)
+		top = next
+		if a >= b {
+			if a >= ymax {
+				return
+			}
+			continue
+		}
+		p := src.Offset + t*src.Stride
+		if !opaque && smask[p>>3]&(1<<uint(p&7)) == 0 {
+			if o.Blend == Copy {
+				for y := a; y < b; y++ {
+					di := dst.Index(x0, y)
+					for i := range n {
+						db.Set(di+i, 0, false)
+					}
+				}
+				marking = mask != nil
+			}
+			continue
+		}
+		v := sb.Pixel(p)
+		if tinted {
+			v = tint(v, &o)
+		}
+		di := dst.Index(x0, a)
+		for y := a; y < b; y, di = y+1, di+dst.Stride {
+			for i := range n {
+				pixels[di+i] = v
+			}
+			if marking {
+				db.SetMaskRange(di, n, true)
 			}
 		}
 	}

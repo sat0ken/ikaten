@@ -1,7 +1,6 @@
 package air
 
 import (
-	"image"
 	"image/color"
 
 	ebiten "github.com/sat0ken/ikaten"
@@ -9,210 +8,301 @@ import (
 
 // Sprites are pixel art written as strings; '.' is transparent. Top views
 // have the nose or bow to the right and the right wing or starboard side at
-// the bottom; side views have the top up.
+// the bottom; side views have the top up. The enemy's planes carry a white
+// star on blue.
 var palette = map[byte]color.RGBA{
-	'K': {20, 22, 26, 255},
-	'k': {60, 62, 68, 255},
-	'g': {120, 124, 130, 255},
-	'G': {150, 154, 160, 255},
-	'w': {200, 204, 210, 255},
-	'W': {244, 246, 250, 255},
 	'B': {54, 74, 104, 255},
+	'D': {160, 120, 76, 255},
+	'G': {150, 154, 160, 255},
+	'K': {20, 22, 26, 255},
+	'O': {255, 150, 40, 255},
+	'R': {220, 50, 30, 255},
+	'S': {150, 150, 156, 255},
+	'W': {244, 246, 250, 255},
+	'Y': {255, 226, 90, 255},
 	'b': {84, 104, 134, 255},
 	'c': {150, 200, 230, 255},
-	'D': {160, 120, 76, 255},
-	'd': {120, 88, 56, 255},
+	'd': {130, 96, 60, 255},
+	'g': {120, 124, 130, 255},
+	'k': {60, 62, 68, 255},
+	'n': {40, 56, 80, 255},
 	'r': {120, 40, 36, 255},
-	'R': {220, 50, 30, 255},
-	'O': {255, 150, 40, 255},
-	'Y': {255, 226, 90, 255},
 	's': {110, 110, 116, 255},
-	'S': {150, 150, 156, 255},
+	'u': {30, 50, 120, 255},
+	'v': {255, 255, 255, 255},
+	'w': {200, 204, 210, 255},
 }
 
 var fighterTop = []string{
-	"....bbb..",
-	"....BBB..",
-	"....BBB..",
-	".b..BBB..",
-	".B..BBB..",
-	"BBBBBcBBK",
-	".B..BBB..",
-	".b..BBB..",
-	"....BBB..",
-	"....BBB..",
-	"....bbb..",
+	"........K.............",
+	"........KKuuu.........",
+	"........KuuWuu........",
+	"........KuWWWu........",
+	"........KuuWuu........",
+	"........KBuuu.........",
+	"........KBBBK.........",
+	"........KBBBK.........",
+	".KKK....KBBBK.........",
+	".KBK....KBBBK.........",
+	".KBK....KBBBK.........",
+	".KBBKKKKbbbbbKKKKKK..k",
+	".KbbbbbbbbbbcccbbbbKKK",
+	".KbbbbbbbbbbcccbbbbKKK",
+	".KnnKKKKbbbbbKKKKKK..k",
+	".KnK....KnnnK.........",
+	".KnK....KnnnK.........",
+	".KKK....KnnnK.........",
+	"........KnnnK.........",
+	"........KnnnK.........",
+	"........Knuuu.........",
+	"........KuuWuu........",
+	"........KuWWWu........",
+	"........KuuWuu........",
+	"........KKuuu.........",
+	"........K.............",
 }
 
 var fighterSide = []string{
-	"B....c...",
-	"BBBBBBBBK",
-	".bBBBBBK.",
+	"KKK...................",
+	"KbK.........cc........",
+	"KbK.......ccccc.......",
+	"KbbKKKuuuKcccccKKKK..K",
+	"KbbBBuuWuuBBccBBBBBKKK",
+	"KKKBBuWWWuBBBBBBBBBKKK",
+	"...KKuuWuuKKKKKKKKK..K",
+	"......uuu.............",
 }
 
 var bomberTop = []string{
-	".....bbb..",
-	".....BBB..",
-	".....BBB..",
-	".....BBB..",
-	".b...BBB..",
-	".B...BBB..",
-	"BBBBcBcBBK",
-	".B...BBB..",
-	".b...BBB..",
-	".....BBB..",
-	".....BBB..",
-	".....BBB..",
-	".....bbb..",
+	"...........K................",
+	"...........KKuuuK...........",
+	"...........KuuWuu...........",
+	"...........KuWWWu...........",
+	"...........KuuWuu...........",
+	"...........KBuuuK...........",
+	"...........KBBBBK...........",
+	"...........KBBBBK...........",
+	"...........KBBBBK...........",
+	"...........KBBBBK...........",
+	".KKKK......KBBBBK...........",
+	".KBBK......KBBBBK...........",
+	".KBBK......KBBBBK...........",
+	".KBBK....KKbbbbbbKKKK.......",
+	".KBbbKKKKbbbbbbbbbbbbKKKKK.k",
+	".KbbbbbbbbbbbbbcccbbbbbbbbKK",
+	".KbbbbbbbbbbbbbcccbbbbbbbbKK",
+	".KnbbKKKKbbbbbbbbbbbbKKKKK.k",
+	".KnnK....KKbbbbbbKKKK.......",
+	".KnnK......KnnnnK...........",
+	".KnnK......KnnnnK...........",
+	".KKKK......KnnnnK...........",
+	"...........KnnnnK...........",
+	"...........KnnnnK...........",
+	"...........KnnnnK...........",
+	"...........KnnnnK...........",
+	"...........KnuuuK...........",
+	"...........KuuWuu...........",
+	"...........KuWWWu...........",
+	"...........KuuWuu...........",
+	"...........KKuuuK...........",
+	"...........K................",
 }
 
 var bomberSide = []string{
-	"B...ccc...",
-	"BBBBBBBBBK",
-	".bBBBBBBK.",
+	"KKK.........................",
+	"KbK.........................",
+	"KbK............cc...........",
+	"KbK...........ccccc.........",
+	"KbK.KKKKuuuKKKcccccKKKKK...K",
+	"KbbKBBBuuWuuBBBccBBBBBBBKKKK",
+	"KKKKBBBuWWWuBBBBBBBBBBBBKKKK",
+	"....KKKuuWuuKKKKKKKKKKKK...K",
+	"........uuu.................",
 }
 
 // Decks, seen from above.
 var deckArt = [shipKinds][]string{
 	carrier: {
-		"...DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD.....",
-		".DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD..",
-		"DDWDDDDDDdDDDDDDDDdDDDDDDDDdDDDDDDDDWDDDDD",
-		"DDWDDDDDDdDDDDDDDDdDDDDDDDDdDDDDDDDDWDDDDD",
-		".DDDDDDDDDDDDDDDDDDDDDDDggggDDDDDDDDDDDD..",
-		"...DDDDDDDDDDDDDDDDDDDDDggggDDDDDDDDDD....",
+		".....kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkgGGGGGGgkkkkkkkkkkkkkkkkkk........",
+		"..kkkDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdggggggggDDDDDdDDDDDDdDDDDDkkkkkk..",
+		"kkDDWDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdggggggggDDDDDdDDDDDDdDDDDDDdWDDDkk",
+		"kDDDWDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdWDDDDk",
+		"kDDDWDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdWDDDDk",
+		"kDDDWDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdWDDDDk",
+		"WWWWWDWWWWDDWWWWDDWWWWDDWWWWdDWWWWDdWWWWDDWWWWDDWWWWDDWWWWDDWWWWDDWWWWdDWWWWDdWWWWDk",
+		"kDDDWDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdWDDDDk",
+		"kDDDWDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdWDDDDk",
+		"kkDDWDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdWDDDkk",
+		"..kkkDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDDdDDDDDkkkkkk..",
+		".....kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk........",
 	},
 	cruiser: {
-		"...ggggggggggggggggggggggggg..",
-		".gggggKggKgggsssssggggKggKggg.",
-		".gggggKggKgggsssssggggKggKgggg",
-		"...ggggggggggggggggggggggggg..",
+		"......kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk......",
+		"..kkkkggggggggggggggggggggggggggggggggggggggggggggggggkkkk..",
+		"kkggggGGGGggggGGGGggggggssssssssssssggggGGGGggggGGGGggggggkk",
+		"kgggggGGGGggggGGGGggggggssKKKssKKKssggggGGGGggggGGGGgggggggk",
+		"kgggggGGGGKKggGGGGKKggggssKKKssKKKssggggGGGGKKggGGGGKKgggggk",
+		"kkggggGGGGggggGGGGggggggssssssssssssggggGGGGggggGGGGggggggkk",
+		"..kkkkggggggggggggggggggggggggggggggggggggggggggggggggkkkk..",
+		"......kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk......",
 	},
 	destroyer: {
-		"..gggggggggggggggggg..",
-		".ggKgggsssgsssgggKgggg",
-		"..gggggggggggggggggg..",
+		".....kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.....",
+		".kkkkgGGggggggggssssssssssgggggggggGGggkkkk.",
+		"kggggGGGGgggggggssKKssKKssggggggggGGGGgggggk",
+		"kggggGGGGKggggggssKKssKKssggggggggGGGGKggggk",
+		".kkkkgGGggggggggssssssssssgggggggggGGggkkkk.",
+		".....kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.....",
 	},
 }
 
 // Superstructures above the deck, seen from the side.
 var upperArt = [shipKinds][]string{
 	carrier: {
-		"........................k.................",
-		"........................k.................",
-		".......................sss................",
-		".......................sss................",
-		".......................sss................",
+		"....................................................kk..............................",
+		"....................................................kk..............................",
+		"..................................................kkkkkk............................",
+		"....................................................kk..............................",
+		"................................................kkkksskkkk..........................",
+		"................................................kKKKKKKKKk..........................",
+		"................................................kssssssssSkk........................",
+		"................................................kssssssssSSk........................",
+		"................................................kssssssssSSk........................",
+		"................................................kssssssssSSk........................",
+		"................................................kssssssssSSk........................",
+		"................................................kkkkkkkkkkkk........................",
 	},
 	cruiser: {
-		"...............k..............",
-		"..............kk..k...........",
-		".............sss..kk..........",
-		"......g.g...ssssssss...g.g....",
-		".....gggggggssssssssgggggg....",
+		"...........................k................................",
+		"..........................ksk...............................",
+		"..........................ksk..kkk..........................",
+		"..........................ksk..ksk..........................",
+		"........................kkssskkssskk........................",
+		"........................kKKKKKKKKKKk........................",
+		"........................kssssssssssk........................",
+		".....kkkkkk..kkkkkk.....kssssssssssk...kkkkkk..kkkkkk.......",
+		".....kGGGGGKKGGGGGGKKKK.kssssssssssk...kGGGGGKKGGGGGGKKKK...",
+		".....kkkkkk..kkkkkk.....kkkkkkkkkkkk...kkkkkk..kkkkkk.......",
 	},
 	destroyer: {
-		"...........k..........",
-		"......s...kk..........",
-		"...g.sss.sss.ss...g...",
-		"..ggggssssssssssggggg.",
+		"..................k.........................",
+		".................ksk........................",
+		".................ksk..kk....................",
+		".................ksk..kk....................",
+		"................kssskksskk..................",
+		".....kkkkk......kssssssssk........kkkkk.....",
+		".....kGGGGKKK...kssssssssk........kGGGGKKK..",
+		".....kkkkk......kkkkkkkkkk........kkkkk.....",
 	},
 }
 
 // The hull's side above the water, stretched to each ship's length.
 var hullArt = []string{
-	"kkkkkkkkkkkkkkkkkkkkkkkk",
-	".kkkkkkkkkkkkkkkkkkkkkk.",
-	"..rrrrrrrrrrrrrrrrrrrr..",
+	"gggggggggggggggggggggggggggggggggggggggggggggggg",
+	"kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+	".kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.",
+	"..kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk..",
+	"...rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr...",
+	"....rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr....",
 }
 
 // The wake behind a ship on the sea, stern to the right.
 var wakeArt = []string{
-	"w...............",
-	".w..............",
-	"..ww............",
-	"....wwwwwwwWWWWW",
-	"..ww............",
-	".w..............",
-	"w...............",
+	"wwww............................",
+	".wwwwwwww.......................",
+	"......wwwwwwww..................",
+	"...........wwwwwwww.............",
+	"................wwwwwwww........",
+	".....................wwwwwwww...",
+	"...........WWWWWWWWWWWWWWWWWWWWW",
+	"...........WWWWWWWWWWWWWWWWWWWWW",
+	".....................wwwwwwww...",
+	"................wwwwwwww........",
+	"...........wwwwwwww.............",
+	"......wwwwwwww..................",
+	".wwwwwwww.......................",
+	"wwww............................",
 }
 
 var cloudArt = []string{
-	".........WWWW...........",
-	"......WWWWWWWWWW........",
-	"...WWWWWWWWWWWWWWWW.....",
-	".WWWWWWWWWWWWWWWWWWWWW..",
-	"WWWWWWWWWWWWWWWWWWWWWWWW",
-	"wwwwwWWWWWWWWWWWWWWwwwww",
-	"..wwwwwwwwwwwwwwwwwwww..",
+	"....................vvvvvvvvvvvv................",
+	"..................vvvvvvvvvvvvvvvv..............",
+	"................vvvvvvvvvvvvvvvvvvvv............",
+	"...............vvvvvvvvvvvvvvvvvvvvvv...........",
+	"..........WWWWWWWWWWWWWWWWWWWWWWWWWWW...........",
+	".......WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW......",
+	"......WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW....",
+	".....WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW...",
+	"....WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..",
+	"....WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..",
+	"....WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..",
+	"...WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..",
+	"..wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww..",
+	"...wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww...",
+	"......wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww......",
+	"..........wwwwwwwwwwwwwwwwwwwwwwwww.............",
 }
 
 var puffArt = [4][]string{
-	puffFlak:   {".kKk.", "kKKKk", "KKKKK", "kKKKk", ".kKk."},
-	puffSmoke:  {".sSs.", "sSSSs", "SSSSS", "sSSSs", ".sSs."},
-	puffFire:   {"..Y..", ".YOY.", "YORrO", ".ORO.", "..R.."},
-	puffSplash: {"..W..", ".WWW.", ".WwW.", "WWwWW", "WwWwW", "WWWWW"},
+	puffFlak: {
+		"....kk....",
+		"..kkkkkk..",
+		".kKKKKkkk.",
+		"kKKgKKKkkk",
+		"kKKKKKKkkk",
+		"kkKKKKkkkk",
+		"kkkkkkkkkk",
+		".kkkkkkkk.",
+		"..kkkkkk..",
+		"....kk....",
+	},
+	puffSmoke: {
+		"....ss....",
+		"..ssssss..",
+		".sSSSSsss.",
+		"sSSSSSSsss",
+		"sSSSSSSsss",
+		"ssSSSSssss",
+		"ssssssssss",
+		".ssssssss.",
+		"..ssssss..",
+		"....ss....",
+	},
+	puffFire: {
+		"..........",
+		".....O....",
+		"...RRRR...",
+		"..RROORR..",
+		".RROOOORR.",
+		"RROOYYOORR",
+		"RROYYYYORR",
+		".RROYYORR.",
+		"..RROORR..",
+		"...RRRR...",
+	},
+	puffSplash: {
+		"..........",
+		"....Ww....",
+		"....wW....",
+		"...wWWw...",
+		"...WWwW...",
+		"..WWwWWw..",
+		"..WwWWwW..",
+		".WwWWwWWw.",
+		".wWWwWWwW.",
+		"wWWwWWwWWw",
+	},
 }
 
-// glyphs is a 3x5 font for the instruments.
-var glyphs = map[byte][5]string{
-	'0': {"###", "#.#", "#.#", "#.#", "###"},
-	'1': {".#.", "##.", ".#.", ".#.", "###"},
-	'2': {"###", "..#", "###", "#..", "###"},
-	'3': {"###", "..#", "###", "..#", "###"},
-	'4': {"#.#", "#.#", "###", "..#", "..#"},
-	'5': {"###", "#..", "###", "..#", "###"},
-	'6': {"###", "#..", "###", "#.#", "###"},
-	'7': {"###", "..#", "..#", ".#.", ".#."},
-	'8': {"###", "#.#", "###", "#.#", "###"},
-	'9': {"###", "#.#", "###", "..#", "###"},
-	'A': {".#.", "#.#", "###", "#.#", "#.#"},
-	'B': {"##.", "#.#", "##.", "#.#", "##."},
-	'C': {".##", "#..", "#..", "#..", ".##"},
-	'D': {"##.", "#.#", "#.#", "#.#", "##."},
-	'E': {"###", "#..", "##.", "#..", "###"},
-	'F': {"###", "#..", "##.", "#..", "#.."},
-	'G': {".##", "#..", "#.#", "#.#", ".##"},
-	'H': {"#.#", "#.#", "###", "#.#", "#.#"},
-	'I': {"###", ".#.", ".#.", ".#.", "###"},
-	'J': {"..#", "..#", "..#", "#.#", ".#."},
-	'K': {"#.#", "#.#", "##.", "#.#", "#.#"},
-	'L': {"#..", "#..", "#..", "#..", "###"},
-	'M': {"#.#", "###", "###", "#.#", "#.#"},
-	'N': {"##.", "#.#", "#.#", "#.#", "#.#"},
-	'O': {".#.", "#.#", "#.#", "#.#", ".#."},
-	'P': {"##.", "#.#", "##.", "#..", "#.."},
-	'Q': {".#.", "#.#", "#.#", "##.", ".##"},
-	'R': {"##.", "#.#", "##.", "#.#", "#.#"},
-	'S': {".##", "#..", ".#.", "..#", "##."},
-	'T': {"###", ".#.", ".#.", ".#.", ".#."},
-	'U': {"#.#", "#.#", "#.#", "#.#", "###"},
-	'V': {"#.#", "#.#", "#.#", "#.#", ".#."},
-	'W': {"#.#", "#.#", "###", "###", "#.#"},
-	'X': {"#.#", "#.#", ".#.", "#.#", "#.#"},
-	'Y': {"#.#", "#.#", ".#.", ".#.", ".#."},
-	'Z': {"###", "..#", ".#.", "#..", "###"},
-	':': {"...", ".#.", "...", ".#.", "..."},
-	'.': {"...", "...", "...", "...", ".#."},
-	'+': {"...", ".#.", "###", ".#.", "..."},
-	'-': {"...", "...", "###", "...", "..."},
-	'/': {"..#", "..#", ".#.", "#..", "#.."},
-	'%': {"#.#", "..#", ".#.", "#..", "#.#"},
-	'=': {"...", "###", "...", "###", "..."},
-	'>': {"#..", ".#.", "..#", ".#.", "#.."},
-	' ': {"...", "...", "...", "...", "..."},
+// sprites holds a game's images. A Game makes them in NewGame and drops them
+// with it, so that the launcher keeps only the running game's in RAM.
+type sprites struct {
+	fighter, bomber [2]*ebiten.Image // top and side
+	deck, upper     [shipKinds]*ebiten.Image
+	hull, wake      *ebiten.Image
+	cloud, cowl     *ebiten.Image
+	puff            [4]*ebiten.Image
 }
-
-const glyphOrder = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:.+-/%=> "
-
-var (
-	imageFighter, imageBomber [2]*ebiten.Image // top and side
-	imageDeck, imageUpper     [shipKinds]*ebiten.Image
-	imageHull, imageWake      *ebiten.Image
-	imageCloud, imageCowl     *ebiten.Image
-	imagePuff                 [4]*ebiten.Image
-	imageGlyph                [256]*ebiten.Image
-)
 
 func sprite(rows []string) *ebiten.Image {
 	img := ebiten.NewImage(len(rows[0]), len(rows))
@@ -226,38 +316,30 @@ func sprite(rows []string) *ebiten.Image {
 	return img
 }
 
-func drawGlyph(img *ebiten.Image, ch byte, x, y int, c color.RGBA) {
-	for gy, row := range glyphs[ch] {
-		for gx := range len(row) {
-			if row[gx] == '#' {
-				img.Set(x+gx, y+gy, c)
-			}
-		}
-	}
-}
+// The cowling ahead of the pilot: the top of a dark ellipse with a rim and
+// a light along its crest.
+const cowlW, cowlH = 128, 18
 
-// cowl is the top of the engine cowling seen from the cockpit: half an
-// ellipse with a lighter rim. It is drawn with integers in rows, so that
-// TinyGo draws it while compiling.
 func cowl() *ebiten.Image {
-	const w, h = 64, 9
-	img := ebiten.NewImage(w, h)
-	for y := range h {
+	img := ebiten.NewImage(cowlW, cowlH)
+	for y := range cowlH {
 		cowlRow(img, y)
 	}
 	return img
 }
 
 func cowlRow(img *ebiten.Image, y int) {
-	const w, h = 64, 9
-	dark, rim := color.RGBA{34, 38, 34, 255}, color.RGBA{70, 76, 66, 255}
+	const w, h = cowlW, cowlH
+	dark, rim, light := color.RGBA{34, 38, 34, 255}, color.RGBA{70, 76, 66, 255}, color.RGBA{58, 64, 56, 255}
 	dy := h - y
 	for x := range w {
 		dx := x*2 - w + 1
 		// Inside (dx/w)² + (dy/h)² < 1, in integers.
 		v := dx*dx*h*h + 4*dy*dy*w*w
 		switch {
-		case v < 4*w*w*h*h*80/100:
+		case v < 4*w*w*h*h*70/100 && dx > -w/3 && dx < w/3 && v > 4*w*w*h*h*55/100:
+			img.Set(x, y, light)
+		case v < 4*w*w*h*h*86/100:
 			img.Set(x, y, dark)
 		case v < 4*w*w*h*h:
 			img.Set(x, y, rim)
@@ -265,26 +347,20 @@ func cowlRow(img *ebiten.Image, y int) {
 	}
 }
 
-func init() {
-	imageFighter = [2]*ebiten.Image{sprite(fighterTop), sprite(fighterSide)}
-	imageBomber = [2]*ebiten.Image{sprite(bomberTop), sprite(bomberSide)}
+func newSprites() *sprites {
+	a := &sprites{}
+	a.fighter = [2]*ebiten.Image{sprite(fighterTop), sprite(fighterSide)}
+	a.bomber = [2]*ebiten.Image{sprite(bomberTop), sprite(bomberSide)}
 	for k := range shipKinds {
-		imageDeck[k] = sprite(deckArt[k])
-		imageUpper[k] = sprite(upperArt[k])
+		a.deck[k] = sprite(deckArt[k])
+		a.upper[k] = sprite(upperArt[k])
 	}
-	imageHull = sprite(hullArt)
-	imageWake = sprite(wakeArt)
-	imageCloud = sprite(cloudArt)
-	for i := range imagePuff {
-		imagePuff[i] = sprite(puffArt[i])
+	a.hull = sprite(hullArt)
+	a.wake = sprite(wakeArt)
+	a.cloud = sprite(cloudArt)
+	for i := range a.puff {
+		a.puff[i] = sprite(puffArt[i])
 	}
-	imageCowl = cowl()
-	font := ebiten.NewImage(len(glyphOrder)*4, 5)
-	for i := range len(glyphOrder) {
-		drawGlyph(font, glyphOrder[i], i*4, 0, color.RGBA{255, 255, 255, 255})
-	}
-	// SubImage allocates, so the glyphs are cut once here.
-	for i := range len(glyphOrder) {
-		imageGlyph[glyphOrder[i]] = font.SubImage(image.Rect(i*4, 0, i*4+3, 5)).(*ebiten.Image)
-	}
+	a.cowl = cowl()
+	return a
 }

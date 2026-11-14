@@ -37,20 +37,6 @@ cp ../../compat/blocks_platform.go.txt blocks/platform_ebitengine.go
 cp ../../games/blocks/assets/*.png blocks/assets/
 cp ../../compat/blocks_main.go.txt blocksmain/main.go
 GOOS=js GOARCH=wasm go build -mod=mod -o ../blocks-ebitengine.wasm ./blocksmain
-# dungeon is written against the Ebitengine API only.
-mkdir -p dungeon dungeonmain
-sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
- -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' ../../games/dungeon/game.go > dungeon/game.go
-cp ../../compat/dungeon_main.go.txt dungeonmain/main.go
-GOOS=js GOARCH=wasm go build -mod=mod -o ../dungeon-ebitengine.wasm ./dungeonmain
-# shooter is written against the Ebitengine API only.
-mkdir -p shooter shootermain
-for f in ../../games/shooter/*.go; do
- sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
-  -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "shooter/$(basename "$f")"
-done
-cp ../../compat/shooter_main.go.txt shootermain/main.go
-GOOS=js GOARCH=wasm go build -mod=mod -o ../shooter-ebitengine.wasm ./shootermain
 # kart also has a course package and swaps its track loading.
 rm -rf kart kartmain
 mkdir -p kart/course kart/assets kartmain
@@ -100,6 +86,27 @@ for f in ../../games/pixtext/*.go; do
  case "$f" in *_test.go) continue;; esac
  sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' "$f" > "pixtext/$(basename "$f")"
 done
+# shooter is written against the Ebitengine API only.
+mkdir -p shooter shootermain
+for f in ../../games/shooter/*.go; do
+ case "$f" in *_test.go) continue;; esac
+ sed -e 's#"github.com/sat0ken/ikaten/games/pixtext"#"ikaten-compat/pixtext"#' \
+  -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+  -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "shooter/$(basename "$f")"
+done
+cp ../../compat/shooter_main.go.txt shootermain/main.go
+GOOS=js GOARCH=wasm go build -mod=mod -o ../shooter-ebitengine.wasm ./shootermain
+# dungeon is written against the Ebitengine API only and uses pixtext.
+rm -rf dungeon dungeonmain
+mkdir -p dungeon dungeonmain
+for f in ../../games/dungeon/*.go; do
+ case "$f" in *_test.go) continue;; esac
+ sed -e 's#"github.com/sat0ken/ikaten/games/pixtext"#"ikaten-compat/pixtext"#' \
+  -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+  -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "dungeon/$(basename "$f")"
+done
+cp ../../compat/dungeon_main.go.txt dungeonmain/main.go
+GOOS=js GOARCH=wasm go build -mod=mod -o ../dungeon-ebitengine.wasm ./dungeonmain
 # train is written against the Ebitengine API only and draws its images in
 # code. Its main is written here.
 rm -rf train trainmain
@@ -134,7 +141,8 @@ rm -rf air airmain
 mkdir -p air airmain
 for f in ../../games/air/*.go; do
  case "$f" in *_test.go) continue;; esac
- sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+ sed -e 's#"github.com/sat0ken/ikaten/games/pixtext"#"ikaten-compat/pixtext"#' \
+  -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
   -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "air/$(basename "$f")"
 done
 cat > airmain/main.go <<'EOF'

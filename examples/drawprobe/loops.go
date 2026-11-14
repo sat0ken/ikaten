@@ -99,3 +99,42 @@ func loops() {
 		op("clear_builtin"+suffix, 2000, func() { clear(a[1 : 1+n]) })
 	}
 }
+
+// floatSum and intSum do 1000 multiplies and adds, and floatToInt 1000
+// conversions, to show what float32 arithmetic costs next to integers.
+//
+//go:noinline
+func floatSum(a, b float32) float32 {
+	s := float32(0)
+	for range 1000 {
+		s = s*a + b
+	}
+	return s
+}
+
+//go:noinline
+func intSum(a, b int32) int32 {
+	s := int32(0)
+	for range 1000 {
+		s = s*a + b
+	}
+	return s
+}
+
+//go:noinline
+func floatToInt(a float32) int {
+	s := 0
+	for i := range 1000 {
+		s += int(a * float32(i))
+	}
+	return s
+}
+
+var sink float32
+var sinkInt int
+
+func arithmetic() {
+	op("float32_mul_add_x1000", 200, func() { sink += floatSum(0.999, 0.5) })
+	op("int32_mul_add_x1000", 200, func() { sinkInt += int(intSum(3, 1)) })
+	op("float32_to_int_x1000", 200, func() { sinkInt += floatToInt(0.37) })
+}

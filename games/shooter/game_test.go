@@ -1,6 +1,10 @@
 package shooter
 
-import "testing"
+import (
+	"testing"
+
+	ebiten "github.com/sat0ken/ikaten"
+)
 
 func playing() *Game {
 	g := NewGame()
@@ -99,4 +103,29 @@ func TestAimPointsAtPlayer(t *testing.T) {
 	if got := g.aim(100*fp, 100*fp); got != 32 {
 		t.Fatalf("to the left: %d", got)
 	}
+}
+
+// Drawing a frame allocates nothing: on the title, in play with the boss,
+// shots, bullets and blasts, during a bomb's flash, and after.
+func TestDrawAllocs(t *testing.T) {
+	screen := ebiten.NewImage(ScreenWidth, ScreenHeight)
+	g := NewGame()
+	check := func(name string) {
+		t.Helper()
+		g.Draw(screen)
+		if n := testing.AllocsPerRun(5, func() { g.ticks++; g.Draw(screen) }); n != 0 {
+			t.Errorf("%s: %v allocations", name, n)
+		}
+	}
+	check("title")
+	g.setMode(modePlay)
+	g.spawn(boss, 60)
+	g.enemies[0].y = 30 * fp
+	g.addShot(0, 0)
+	g.fan(60*fp, 30*fp, down, 5, 3, 20)
+	g.addBlast(60*fp, 60*fp, 0)
+	g.bombFlash = 8
+	check("play")
+	g.setMode(modeOver)
+	check("over")
 }

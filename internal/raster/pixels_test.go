@@ -138,3 +138,103 @@ func TestMirrored(t *testing.T) {
 		}
 	}
 }
+
+// A solid pixel drawn rotated, skewed and scaled fills a parallelogram a row
+// at a time; it must cover exactly the pixels the per-pixel loop does. The
+// same pixel with a mask that shows it takes that loop.
+func TestSolidParallelogram(t *testing.T) {
+	solid := View{Buffer: &Buffer{Pixels: []uint16{0xbeef}, Opaque: true}, Bounds: image.Rect(0, 0, 1, 1), Stride: 1}
+	masked := View{Buffer: &Buffer{Pixels: []uint16{0xbeef}, Mask: []byte{1}}, Bounds: image.Rect(0, 0, 1, 1), Stride: 1}
+	rng := uint32(12345)
+	random := func() float32 {
+		rng ^= rng << 13
+		rng ^= rng >> 17
+		rng ^= rng << 5
+		return float32(rng%20000)/10000 - 1
+	}
+	for k := range 3000 {
+		o := Options{A: random() * 90, B: random() * 90, C: random() * 90, D: random() * 90,
+			TX: random()*60 + 30, TY: random()*60 + 30, R: 256, G: 256, Blue: 256, Alpha: 256}
+		if k%7 == 0 {
+			o.B, o.C = 0, 0 // axis-aligned, as when level
+		}
+		var got, want View
+		for i, v := range []*View{&got, &want} {
+			*v = View{Buffer: &Buffer{Pixels: make([]uint16, 64*64), Mask: make([]byte, 64*64/8)}, Bounds: image.Rect(0, 0, 64, 64), Stride: 64}
+			src := solid
+			if i == 1 {
+				src = masked
+			}
+			if !affine(*v, src, o) {
+				t.Skip("transform not handled")
+			}
+		}
+		for i := range got.Buffer.Pixels {
+			if got.Buffer.Pixels[i] != want.Buffer.Pixels[i] || got.Buffer.Visible(i) != want.Buffer.Visible(i) {
+				t.Fatalf("case %d %+v: pixel %d,%d is %x, want %x", k, o, i%64, i/64, got.Buffer.Pixels[i], want.Buffer.Pixels[i])
+			}
+		}
+	}
+}
+
+// A one-pixel-wide image stretched or shrunk down, a whole number of pixels
+// wide, as a raycaster's walls, takes the column path. It may differ from
+// the general path only where a row's center sits on a texel's edge.
+func TestColumnNearlyMatchesGeneral(t *testing.T) {
+	rng := uint32(99)
+	random := func() float32 {
+		rng ^= rng << 13
+		rng ^= rng >> 17
+		rng ^= rng << 5
+		return float32(rng%100000) / 100000
+	}
+	const w, h = 5, 32
+	pixels, mask := make([]uint16, w*h), make([]byte, (w*h+7)/8)
+	for i := range pixels {
+		pixels[i] = uint16(i*7919 + 3)
+		if i%3 != 0 {
+			mask[i>>3] |= 1 << uint(i&7)
+		}
+	}
+	differing, total := 0, 0
+	for k := range 3000 {
+		// One column of a wider image, as SubImage gives.
+		col := 1 + k%3
+		buf := &Buffer{Pixels: pixels, Mask: mask}
+		if k%2 == 0 {
+			buf = &Buffer{Pixels: pixels, Opaque: true}
+		}
+		src := View{Buffer: buf, Bounds: image.Rect(col, 0, col+1, h), Stride: w, Offset: col}
+		o := Options{A: float32(1 + k%3), D: 0.1 + random()*12, TX: float32(int(random()*80) - 10), TY: random()*120 - 40,
+			R: 256, G: 256, Blue: 256, Alpha: 256}
+		if k%5 == 0 {
+			o.R, o.Blue = 180, 90 // shaded
+		}
+		if k%7 == 0 {
+			o.Blend = Copy
+		}
+		var got, want View
+		for i, v := range []*View{&got, &want} {
+			dp := make([]uint16, 64*96)
+			dm := make([]byte, 64*96/8)
+			for j := range dp {
+				dp[j] = 0x1111
+				if j%2 == 0 {
+					dm[j>>3] |= 1 << uint(j&7)
+				}
+			}
+			*v = View{Buffer: &Buffer{Pixels: dp, Mask: dm}, Bounds: image.Rect(0, 0, 64, 96), Stride: 64}
+			draw(*v, src, o, i == 1)
+		}
+		for i := range got.Buffer.Pixels {
+			total++
+			if got.Buffer.Pixels[i] != want.Buffer.Pixels[i] || got.Buffer.Visible(i) != want.Buffer.Visible(i) {
+				differing++
+			}
+		}
+	}
+	if differing*10000 > total {
+		t.Fatalf("%d of %d pixels differ", differing, total)
+	}
+	t.Logf("%d of %d pixels differ", differing, total)
+}
