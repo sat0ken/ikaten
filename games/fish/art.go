@@ -258,13 +258,15 @@ var weedArt = [2][]string{
 	},
 }
 
-var (
-	imageFish              [kinds]*ebiten.Image
-	imageBoat, imageAngler *ebiten.Image
-	imageWeed              [2]*ebiten.Image
-	imageRock, imageLure   *ebiten.Image
-	imageSun, imageBubble  *ebiten.Image
-)
+// sprites holds a game's images. A Game makes them in NewGame and drops them
+// with it, so that the launcher keeps only the running game's in RAM.
+type sprites struct {
+	fish         [kinds]*ebiten.Image
+	boat, angler *ebiten.Image
+	weed         [2]*ebiten.Image
+	rock, lure   *ebiten.Image
+	sun, bubble  *ebiten.Image
+}
 
 func sprite(rows []string) *ebiten.Image {
 	img := ebiten.NewImage(len(rows[0]), len(rows))
@@ -292,17 +294,19 @@ func sun() *ebiten.Image {
 	return img
 }
 
-func init() {
+func newSprites() *sprites {
+	a := &sprites{}
 	for k := range kinds {
-		imageFish[k] = sprite(fishArt[k])
+		a.fish[k] = sprite(fishArt[k])
 	}
-	imageBoat = sprite(boatArt)
-	imageAngler = sprite(anglerArt)
-	for f := range imageWeed {
-		imageWeed[f] = sprite(weedArt[f])
+	a.boat = sprite(boatArt)
+	a.angler = sprite(anglerArt)
+	for f := range a.weed {
+		a.weed[f] = sprite(weedArt[f])
 	}
-	imageRock = sprite(rockArt)
-	imageLure = sprite(lureArt)
-	imageBubble = sprite(bubbleArt)
-	imageSun = sun()
+	a.rock = sprite(rockArt)
+	a.lure = sprite(lureArt)
+	a.bubble = sprite(bubbleArt)
+	a.sun = sun()
+	return a
 }

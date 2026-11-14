@@ -287,15 +287,17 @@ const (
 	hillHeight = 24
 )
 
-var (
-	imageTree, imagePine, imageStopMark   *ebiten.Image
-	imageWhistle, imageBuffer, imageBoard *ebiten.Image
-	imageHouse                            [2]*ebiten.Image
-	imageCrossing                         [2]*ebiten.Image
-	imageHills                            *ebiten.Image
-	imageLimit                            [100]*ebiten.Image // speed limit signs by km/h
-	imageDistance                         [4]*ebiten.Image   // boards 100, 200 and 300 m before a stop
-)
+// sprites holds a game's images. A Game makes them in NewGame and drops them
+// with it, so that the launcher keeps only the running game's in RAM.
+type sprites struct {
+	tree, pine, stopMark   *ebiten.Image
+	whistle, buffer, board *ebiten.Image
+	house                  [2]*ebiten.Image
+	crossing               [2]*ebiten.Image
+	hills                  *ebiten.Image
+	limit                  [100]*ebiten.Image // speed limit signs by km/h
+	distance               [4]*ebiten.Image   // boards 100, 200 and 300 m before a stop
+}
 
 func sprite(rows []string) *ebiten.Image {
 	img := ebiten.NewImage(len(rows[0]), len(rows))
@@ -404,24 +406,26 @@ func hillColumns(img *ebiten.Image, from, to int) {
 	}
 }
 
-func init() {
-	imageTree = sprite(treeArt)
-	imagePine = sprite(pineArt)
-	imageStopMark = sprite(stopMarkArt)
-	imageWhistle = sprite(whistleArt)
-	imageBuffer = sprite(bufferArt)
-	imageBoard = sprite(nameBoardArt)
+func newSprites() *sprites {
+	a := &sprites{}
+	a.tree = sprite(treeArt)
+	a.pine = sprite(pineArt)
+	a.stopMark = sprite(stopMarkArt)
+	a.whistle = sprite(whistleArt)
+	a.buffer = sprite(bufferArt)
+	a.board = sprite(nameBoardArt)
 	for i := range 2 {
-		imageHouse[i] = sprite(houseArt[i])
-		imageCrossing[i] = sprite(crossingArt[i])
+		a.house[i] = sprite(houseArt[i])
+		a.crossing[i] = sprite(crossingArt[i])
 	}
-	imageHills = hills()
+	a.hills = hills()
 	for _, l := range limits {
-		if imageLimit[l.kmh] == nil {
-			imageLimit[l.kmh] = limitSign(l.kmh)
+		if a.limit[l.kmh] == nil {
+			a.limit[l.kmh] = limitSign(l.kmh)
 		}
 	}
 	for n := 1; n <= 3; n++ {
-		imageDistance[n] = distanceBoard(n)
+		a.distance[n] = distanceBoard(n)
 	}
+	return a
 }

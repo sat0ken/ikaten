@@ -228,7 +228,7 @@ func (g *Game) drawSky(screen *ebiten.Image) {
 		x -= hillWidth
 	}
 	for ; x < ScreenWidth; x += hillWidth {
-		drawAt(screen, imageHills, x, horizon+1-hillHeight)
+		drawAt(screen, g.art.hills, x, horizon+1-hillHeight)
 	}
 }
 
@@ -481,27 +481,27 @@ func (g *Game) drawObject(screen *ebiten.Image, o *object) {
 	var img *ebiten.Image
 	switch o.kind {
 	case objTree:
-		img = imageTree
+		img = g.art.tree
 	case objPine:
-		img = imagePine
+		img = g.art.pine
 	case objHouse:
-		img = imageHouse[0]
+		img = g.art.house[0]
 	case objFlats:
-		img = imageHouse[1]
+		img = g.art.house[1]
 	case objLimit:
-		img = imageLimit[o.arg]
+		img = g.art.limit[o.arg]
 	case objWhistle:
-		img = imageWhistle
+		img = g.art.whistle
 	case objCrossing:
-		img = imageCrossing[(g.ticks/20+o.arg)%2]
+		img = g.art.crossing[(g.ticks/20+o.arg)%2]
 	case objDistance:
-		img = imageDistance[o.arg]
+		img = g.art.distance[o.arg]
 	case objStopMark:
-		img = imageStopMark
+		img = g.art.stopMark
 	case objBoard:
-		img = imageBoard
+		img = g.art.board
 	case objBuffer:
-		img = imageBuffer
+		img = g.art.buffer
 	}
 	scale := spriteHeight[o.kind] * ppm / float32(img.Bounds().Dy())
 	if scale*float32(img.Bounds().Dy()) < 1 {

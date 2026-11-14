@@ -96,18 +96,40 @@ func (r *ridge) height(x int) int {
 
 const farPeriod, nearPeriod = 180, 140
 
-var (
-	farRidge  = ridge{period: farPeriod, low: 68, high: 68 + 42 + 21}
-	nearRidge = ridge{period: nearPeriod, low: 36, high: 36 + 32 + 16}
-	// ridgeStage is the stage plus one whose colors the ridges are in.
-	ridgeStage int
-)
+// backdrop holds the large images drawn for a stage: the ridges, and the
+// ground strips below. They belong to a Game, made in NewGame, and are
+// dropped with it: in the launcher they would otherwise take some 70 KB of
+// RAM while other games run.
+type backdrop struct {
+	far, near  ridge
+	ridgeStage int // the stage plus one whose colors the ridges are in
 
-func init() {
-	for _, r := range [2]*ridge{&farRidge, &nearRidge} {
+	// strip holds a column of ground tiles for the stage being drawn,
+	// starting with each of the two kinds, and cut its tops n tiles long:
+	// a run of ground is drawn at once rather than a tile at a time.
+	strip      [2]*ebiten.Image
+	cut        [2][rows + 1]*ebiten.Image
+	stripStage int // the stage plus one
+}
+
+func newBackdrop() *backdrop {
+	b := &backdrop{
+		far:  ridge{period: farPeriod, low: 68, high: 68 + 42 + 21},
+		near: ridge{period: nearPeriod, low: 36, high: 36 + 32 + 16},
+	}
+	for _, r := range [2]*ridge{&b.far, &b.near} {
 		r.img = ebiten.NewImage(r.period, r.high-r.low)
 		r.roof = ebiten.NewImage(r.period, (r.high-r.low)/2+1)
 	}
+	for k := range b.strip {
+		b.strip[k] = ebiten.NewImage(T, rows*T)
+		b.strip[k].Fill(color.RGBA{0, 0, 0, 255}) // opaque: see solidArt
+		// SubImage allocates, so the pieces are cut once here.
+		for n := 1; n <= rows; n++ {
+			b.cut[k][n] = b.strip[k].SubImage(image.Rect(0, 0, T, n*T)).(*ebiten.Image)
+		}
+	}
+	return b
 }
 
 // paint draws the ridge in c with its heights divided by div, standing on
@@ -167,7 +189,8 @@ func (g *Game) drawBackground(screen *ebiten.Image, lk *look, cam int) {
 	if g.stage == 2 {
 		div = [2]int{2, 3} // a sea of clouds far below
 	}
-	foot := ScreenHeight - farRidge.low/div[0]
+	b := g.back
+	foot := ScreenHeight - b.far.low/div[0]
 	for i := range bands {
 		y := i * ScreenHeight / bands
 		h := min(ScreenHeight/bands, foot-y)
@@ -182,21 +205,21 @@ func (g *Game) drawBackground(screen *ebiten.Image, lk *look, cam int) {
 			if x < -40 {
 				x += cloudSpan
 			}
-			drawAt(screen, imageFarCloud, x, 22+i*29%70)
+			drawAt(screen, g.art.farCloud, x, 22+i*29%70)
 		}
 	}
-	if ridgeStage != g.stage+1 {
-		farRidge.paint(lk.far, div[0], g.stage == 1)
-		nearRidge.paint(lk.near, div[1], g.stage == 1)
-		ridgeStage = g.stage + 1
+	if b.ridgeStage != g.stage+1 {
+		b.far.paint(lk.far, div[0], g.stage == 1)
+		b.near.paint(lk.near, div[1], g.stage == 1)
+		b.ridgeStage = g.stage + 1
 	}
 	if g.stage == 1 {
 		// Rock hangs from the cave's roof as well.
-		farRidge.draw(screen, lk.far, cam/4+70, true)
-		nearRidge.draw(screen, lk.near, cam/2+30, true)
+		b.far.draw(screen, lk.far, cam/4+70, true)
+		b.near.draw(screen, lk.near, cam/2+30, true)
 	}
-	farRidge.draw(screen, lk.far, cam/4, false)
-	nearRidge.draw(screen, lk.near, cam/2, false)
+	b.far.draw(screen, lk.far, cam/4, false)
+	b.near.draw(screen, lk.near, cam/2, false)
 }
 
 func lerp(a, b color.RGBA, t float32) color.RGBA {
@@ -220,8 +243,8 @@ func (g *Game) ground(c, r int) bool {
 func (g *Game) drawTiles(screen *ebiten.Image, cam int) {
 	s := g.stage
 	edge := looks[s].ground[3]
-	if stripStage != s+1 {
-		paintStrips(s)
+	if g.back.stripStage != s+1 {
+		g.back.paintStrips(g.art, s)
 	}
 	c0, c1 := cam/T, min((cam+ScreenWidth)/T+1, g.width)
 	for c := c0; c < c1; c++ {
@@ -237,25 +260,25 @@ func (g *Game) drawTiles(screen *ebiten.Image, cam int) {
 				top := !g.ground(c, r-1)
 				start := r
 				if top {
-					drawAt(screen, imageGroundTop[s], x, y)
+					drawAt(screen, g.art.groundTop[s], x, y)
 					start++
 				}
 				if start < run {
 					// The rest of the run in one piece.
-					drawAt(screen, groundCut[(c+start)%2][run-start], x, start*T)
+					drawAt(screen, g.back.cut[(c+start)%2][run-start], x, start*T)
 				}
 				g.drawEdges(screen, edge, c, r, run, top, x)
 				r = run - 1
 			case '=':
-				drawAt(screen, imageBlock[s], x, y)
+				drawAt(screen, g.art.block[s], x, y)
 			case 'd':
-				drawAt(screen, imageDirt[s], x, y)
+				drawAt(screen, g.art.dirt[s], x, y)
 			case '-':
-				drawAt(screen, imageCloud, x, y)
+				drawAt(screen, g.art.cloud, x, y)
 			case '^':
-				drawAt(screen, imageSpike, x, y)
+				drawAt(screen, g.art.spike, x, y)
 			case 'o':
-				drawAt(screen, imageGem[(g.ticks/12+c)%2], x+2, y+2)
+				drawAt(screen, g.art.gem[(g.ticks/12+c)%2], x+2, y+2)
 			case 'C', 'c':
 				fill(screen, poleShade, x+3, y-12, 2, T+12)
 				fill(screen, poleLight, x+3, y-12, 1, T+12)
@@ -306,34 +329,14 @@ func (g *Game) drawEdges(screen *ebiten.Image, edge color.RGBA, c, r, run int, t
 	}
 }
 
-// groundStrip holds a column of ground tiles for the stage being drawn,
-// starting with each of the two kinds, and groundCut its tops n tiles long:
-// a run of ground is drawn at once rather than a tile at a time.
-var (
-	groundStrip [2]*ebiten.Image
-	groundCut   [2][rows + 1]*ebiten.Image
-	stripStage  int // the stage plus one
-)
-
-func init() {
-	for k := range groundStrip {
-		groundStrip[k] = ebiten.NewImage(T, rows*T)
-		groundStrip[k].Fill(color.RGBA{0, 0, 0, 255}) // opaque: see solidArt
-		// SubImage allocates, so the pieces are cut once here.
-		for n := 1; n <= rows; n++ {
-			groundCut[k][n] = groundStrip[k].SubImage(image.Rect(0, 0, T, n*T)).(*ebiten.Image)
-		}
-	}
-}
-
 // paintStrips draws the ground strips in the stage's colors.
-func paintStrips(stage int) {
-	for k := range groundStrip {
+func (b *backdrop) paintStrips(art *sprites, stage int) {
+	for k := range b.strip {
 		for i := range rows {
-			drawAt(groundStrip[k], imageGround[stage][(k+i)%2], 0, i*T)
+			drawAt(b.strip[k], art.ground[stage][(k+i)%2], 0, i*T)
 		}
 	}
-	stripStage = stage + 1
+	b.stripStage = stage + 1
 }
 
 func abs(v int) int {
@@ -373,13 +376,13 @@ func (g *Game) drawEnemies(screen *ebiten.Image, cam int) {
 		var img *ebiten.Image
 		switch {
 		case e.squashed > 0:
-			img = imageSquash
+			img = g.art.squash
 		case e.kind == moth:
-			img = imageMoth[frame]
+			img = g.art.moth[frame]
 		case e.kind == spiky:
-			img = imageSpiky[frame]
+			img = g.art.spiky[frame]
 		default:
-			img = imageBug[frame]
+			img = g.art.bug[frame]
 		}
 		var op ebiten.DrawImageOptions
 		if e.vx < 0 {
@@ -430,7 +433,7 @@ func (g *Game) drawGopher(screen *ebiten.Image, cam int) {
 		op.GeoM.Translate(gopherW, 0)
 	}
 	op.GeoM.Translate(float64(x), float64(y))
-	screen.DrawImage(imageGopher[frame], &op)
+	screen.DrawImage(g.art.gopher[frame], &op)
 }
 
 func (g *Game) drawHUD(screen *ebiten.Image) {
@@ -438,13 +441,13 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 		return
 	}
 	for i := range hearts {
-		img := imageHeart[0]
+		img := g.art.heart[0]
 		if i >= g.heartsLeft {
-			img = imageHeart[1]
+			img = g.art.heart[1]
 		}
 		drawAt(screen, img, 4+i*16, 4)
 	}
-	drawAt(screen, imageGem[0], 56, 4)
+	drawAt(screen, g.art.gem[0], 56, 4)
 	line.Reset().Str("x").Num(g.gems).Shade(textShadow).Draw(screen, 70, 7, 1, textWhite)
 	line.Reset().Str("GOPHER x").Num(g.livesLeft).Shade(textShadow).Draw(screen, 104, 7, 1, textWhite)
 	line.Reset().Num(g.score).Shade(textShadow).Right(screen, ScreenWidth-4, 7, 1, textWhite)
@@ -459,7 +462,7 @@ func (g *Game) drawOverlay(screen *ebiten.Image) {
 		var op ebiten.DrawImageOptions
 		op.GeoM.Scale(3, 3)
 		op.GeoM.Translate(mid-27, 64)
-		screen.DrawImage(imageGopher[3*(g.modeTicks/30%2)], &op)
+		screen.DrawImage(g.art.gopher[3*(g.modeTicks/30%2)], &op)
 		line.Reset().Str("A: JUMP   B: DASH").Center(screen, mid, 140, 1, textWhite)
 		line.Reset().Str("DASH BREAKS DIRT").Center(screen, mid, 154, 1, textGray)
 		if g.modeTicks/30%2 == 0 {
@@ -489,7 +492,7 @@ func (g *Game) drawOverlay(screen *ebiten.Image) {
 		var op ebiten.DrawImageOptions
 		op.GeoM.Scale(2, 2)
 		op.GeoM.Translate(mid-18, 96)
-		screen.DrawImage(imageGopher[3*(g.modeTicks/20%2)], &op)
+		screen.DrawImage(g.art.gopher[3*(g.modeTicks/20%2)], &op)
 		line.Reset().Str("SCORE ").Num(g.score).Center(screen, mid, 154, 1, textYellow)
 	}
 }

@@ -77,6 +77,8 @@ type result struct {
 }
 
 type Game struct {
+	art *sprites
+
 	mode             mode
 	ticks, modeTicks int
 
@@ -113,7 +115,7 @@ type Game struct {
 }
 
 func NewGame() *Game {
-	g := &Game{}
+	g := &Game{art: newSprites()}
 	g.reset()
 	return g
 }
@@ -123,9 +125,9 @@ func NewGame() *Game {
 var fresh Game
 
 func (g *Game) reset() {
-	m, t := g.mode, g.ticks
+	m, t, a := g.mode, g.ticks, g.art
 	*g = fresh
-	g.mode, g.ticks = m, t
+	g.mode, g.ticks, g.art = m, t, a
 	g.next = 1
 	g.notch = -maxBrake
 	g.brake = brakeStep * maxBrake

@@ -550,17 +550,19 @@ var palette = map[byte]color.RGBA{
 // The head shown in the score bar is the top of the gopher facing down.
 const headH = 13
 
-var (
-	imageGopher           [players][3][3]*ebiten.Image
-	imageFaint            [players]*ebiten.Image
-	imageHead             [players]*ebiten.Image
-	imageWall, imageBlock *ebiten.Image
-	imageCrumble          [2]*ebiten.Image
-	imageBomb             [2]*ebiten.Image
-	imageItem             [4]*ebiten.Image
-	imageGrass            [2]*ebiten.Image
-	imageFire             [3][7]*ebiten.Image // two flickers and dying down
-)
+// sprites holds a game's images. A Game makes them in NewGame and drops them
+// with it, so that the launcher keeps only the running game's in RAM.
+type sprites struct {
+	gopher      [players][3][3]*ebiten.Image
+	faint       [players]*ebiten.Image
+	head        [players]*ebiten.Image
+	wall, block *ebiten.Image
+	crumble     [2]*ebiten.Image
+	bomb        [2]*ebiten.Image
+	item        [4]*ebiten.Image
+	grass       [2]*ebiten.Image
+	fire        [3][7]*ebiten.Image // two flickers and dying down
+}
 
 // The pieces of a blast: the middle where it crosses or starts, the arms
 // along a row or a column, and the ends, named for the side they end on.
@@ -671,32 +673,34 @@ func sprite(rows []string) *ebiten.Image {
 	return img
 }
 
-func init() {
+func newSprites() *sprites {
+	a := &sprites{}
 	for i := range players {
 		for v := range 3 {
 			for f := range 3 {
-				imageGopher[i][v][f] = gopherSprite(gopherArt[v][f], i)
+				a.gopher[i][v][f] = gopherSprite(gopherArt[v][f], i)
 			}
 		}
-		imageFaint[i] = gopherSprite(faintArt, i)
+		a.faint[i] = gopherSprite(faintArt, i)
 		// SubImage allocates, so the heads are cut once here.
-		imageHead[i] = imageGopher[i][down][0].SubImage(image.Rect(0, 0, tile, headH)).(*ebiten.Image)
+		a.head[i] = a.gopher[i][down][0].SubImage(image.Rect(0, 0, tile, headH)).(*ebiten.Image)
 	}
-	imageWall = sprite(wallArt)
-	imageBlock = sprite(blockArt)
+	a.wall = sprite(wallArt)
+	a.block = sprite(blockArt)
 	for f := range 2 {
-		imageCrumble[f] = sprite(crumbleArt[f])
-		imageBomb[f] = sprite(bombArt[f])
-		imageGrass[f] = sprite(grassArt[f])
+		a.crumble[f] = sprite(crumbleArt[f])
+		a.bomb[f] = sprite(bombArt[f])
+		a.grass[f] = sprite(grassArt[f])
 	}
 	for k := fireUp; k <= speedUp; k++ {
-		imageItem[k] = sprite(itemArt[k])
+		a.item[k] = sprite(itemArt[k])
 	}
-	for heat := range imageFire {
-		for piece := range imageFire[heat] {
-			imageFire[heat][piece] = fireImage(piece, heat)
+	for heat := range a.fire {
+		for piece := range a.fire[heat] {
+			a.fire[heat][piece] = fireImage(piece, heat)
 		}
 	}
+	return a
 }
 
 // solidArt fills an image whose art has no transparent pixel before it is

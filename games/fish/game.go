@@ -150,6 +150,8 @@ const (
 var messages = [...]string{"", "FISH ON!", "TOO EARLY", "MISSED", "LINE BROKE", "IT GOT AWAY", "BOTTOM", "OUT OF LINE"}
 
 type Game struct {
+	art *sprites
+
 	mode             mode
 	ticks, modeTicks int
 	rng              uint32
@@ -193,7 +195,7 @@ type Game struct {
 }
 
 func NewGame() *Game {
-	g := &Game{rng: 2463534242}
+	g := &Game{art: newSprites(), rng: 2463534242}
 	g.reset()
 	return g
 }

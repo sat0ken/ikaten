@@ -111,6 +111,8 @@ const (
 )
 
 type Game struct {
+	art *sprites
+
 	mode             mode
 	ticks, modeTicks int
 	rng              uint32
@@ -159,7 +161,7 @@ type Game struct {
 func NewGame() *Game {
 	// Draw redraws only what changed, on the screen of the last frame.
 	ebiten.SetScreenClearedEveryFrame(false)
-	g := &Game{rng: 2463534242, level: 1}
+	g := &Game{art: newSprites(), rng: 2463534242, level: 1}
 	g.newMatch()
 	g.mode = modeTitle
 	return g

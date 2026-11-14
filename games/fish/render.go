@@ -98,7 +98,7 @@ func (g *Game) drawSky(screen *ebiten.Image, top, horizon color.RGBA) {
 		lift := 0.2 + 3.2*t*(1-t) // low at the ends, highest at noon
 		y := g.sy(-1 - lift*11)
 		c := lerp(color.RGBA{255, 150, 80, 255}, color.RGBA{255, 245, 210, 255}, min((lift-0.2)*1.8, 1))
-		drawTinted(screen, imageSun, int(x)-9, int(y)-9, c)
+		drawTinted(screen, g.art.sun, int(x)-9, int(y)-9, c)
 	}
 }
 
@@ -170,9 +170,9 @@ func (g *Game) drawBottom(screen *ebiten.Image) {
 		h := hash(i)
 		x := float32(4 + h%58)
 		y := g.sy(seabed(x))
-		img := imageWeed[(g.ticks/40+i)%2]
+		img := g.art.weed[(g.ticks/40+i)%2]
 		if h>>8%3 == 0 {
-			img = imageRock
+			img = g.art.rock
 		}
 		b := img.Bounds()
 		drawAt(screen, img, int(sx(x))-b.Dx()/2, int(y)-b.Dy()+2)
@@ -223,7 +223,7 @@ func (g *Game) drawFish(screen *ebiten.Image) {
 			continue
 		}
 		t := &speciesTypes[f.kind]
-		img := imageFish[f.kind]
+		img := g.art.fish[f.kind]
 		// A little bigger for a big one of its kind.
 		scale := 0.8 + 0.4*(f.length-t.minLen)/max(t.maxLen-t.minLen, 1)
 		x, y := sx(f.x), g.sy(f.depth)
@@ -271,8 +271,8 @@ func (g *Game) drawBoat(screen *ebiten.Image) {
 	}
 	bob := sinf(float32(g.ticks)*0.04) * 1.6
 	top := int(y+bob) - 4 // the deck
-	drawAt(screen, imageAngler, int(sx(-1.6))-6, top-imageAngler.Bounds().Dy()+1)
-	drawAt(screen, imageBoat, int(sx(-6.5)), top)
+	drawAt(screen, g.art.angler, int(sx(-1.6))-6, top-g.art.angler.Bounds().Dy()+1)
+	drawAt(screen, g.art.boat, int(sx(-6.5)), top)
 	// The rod, from the angler's hands to the tip.
 	hx, hy := sx(-1.6)+8, float32(top-9)
 	tx, ty := g.rodTip()
@@ -288,10 +288,10 @@ func (g *Game) drawLine(screen *ebiten.Image) {
 	lx, ly := sx(g.lureX), g.sy(g.jigDepth())
 	line(screen, color.RGBA{220, 225, 230, 255}, tx, ty, lx, ly)
 	if g.mode != modeFight {
-		drawAt(screen, imageLure, int(lx)-3, int(ly)-1)
+		drawAt(screen, g.art.lure, int(lx)-3, int(ly)-1)
 	}
 	if g.mode == modeFishing && (g.freeFall || g.jigOff > 0.1) && g.ticks%8 < 5 {
-		drawAt(screen, imageBubble, int(lx)-2, int(ly)-10-g.ticks%8*2)
+		drawAt(screen, g.art.bubble, int(lx)-2, int(ly)-10-g.ticks%8*2)
 	}
 	if g.mode == modeFishing && g.suitor >= 0 {
 		switch g.fish[g.suitor].state {
@@ -428,7 +428,7 @@ func (g *Game) drawCatch(screen *ebiten.Image) {
 	c := &g.lastLand
 	box(screen, 24, 44, 192, 136)
 	text.Reset().Str(speciesTypes[c.kind].name).Center(screen, mid, 52, 2, textWhite)
-	img := imageFish[c.kind]
+	img := g.art.fish[c.kind]
 	b := img.Bounds()
 	var op ebiten.DrawImageOptions
 	op.GeoM.Scale(3, 3)
