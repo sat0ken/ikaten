@@ -10,8 +10,10 @@ import (
 	"github.com/sat0ken/ikaten/games/dungeon"
 )
 
-// autoplay starts the game, walks, turns and fires on a fixed rhythm, and prints
-// timings every 10 seconds.
+// autoplay starts the game and fires on a fixed rhythm, and prints timings
+// every 10 seconds. It presses Space: boards read their buttons into KeyZ
+// and the arrow keys every tick, which would hide autoplay's presses, so on a
+// board the player stays where it starts while the slimes come.
 type autoplay struct {
 	*dungeon.Game
 	ticks         int
@@ -23,7 +25,7 @@ type autoplay struct {
 func (g *autoplay) Update() error {
 	g.ticks++
 	t := g.ticks % 120
-	ebiten.SetKeyState(ebiten.KeyZ, t%20 == 0)
+	ebiten.SetKeyState(ebiten.KeySpace, t%20 == 0)
 	ebiten.SetKeyState(ebiten.KeyArrowUp, t < 60)
 	ebiten.SetKeyState(ebiten.KeyArrowRight, t >= 60 && t < 100)
 	now := time.Now()
