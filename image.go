@@ -252,14 +252,6 @@ func scaleFixed(v float32) int32 {
 	mantissa := bits&0x7fffff | 0x800000
 	return int32((mantissa + 1<<(shift-1)) >> shift)
 }
-
-// DrawImage is placed in IRAM on ESP32 and ESP32-S3 (sections named .iram1
-// go there; other targets keep them with the rest of the code). The raster
-// paths are inlined into it, some 14 KB, which run from the flash cache
-// otherwise: on the badge a draw call cost 15 to 25 us more than its pixels
-// account for.
-//
-//go:section .iram1.ikaten.DrawImage
 func (i *Image) DrawImage(src *Image, options *DrawImageOptions) {
 	i.mutable()
 	if src == nil {
