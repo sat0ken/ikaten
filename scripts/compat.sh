@@ -80,7 +80,8 @@ rm -rf uboat uboatmain
 mkdir -p uboat/assets uboatmain
 for f in ../../games/uboat/*.go; do
  case "$f" in *platform_ikaten.go|*assets.go|*_test.go) continue;; esac
- sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
+ sed -e 's#"github.com/sat0ken/ikaten/games/pixtext"#"ikaten-compat/pixtext"#' \
+  -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
   -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "uboat/$(basename "$f")"
 done
 cp ../../compat/uboat_platform.go.txt uboat/platform_ebitengine.go
