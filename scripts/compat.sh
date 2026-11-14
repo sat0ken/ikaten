@@ -37,6 +37,13 @@ cp ../../compat/blocks_platform.go.txt blocks/platform_ebitengine.go
 cp ../../games/blocks/assets/*.png blocks/assets/
 cp ../../compat/blocks_main.go.txt blocksmain/main.go
 GOOS=js GOARCH=wasm go build -mod=mod -o ../blocks-ebitengine.wasm ./blocksmain
+# pixtext is the font that the games drawn for 240 by 240 share.
+rm -rf pixtext
+mkdir -p pixtext
+for f in ../../games/pixtext/*.go; do
+ case "$f" in *_test.go) continue;; esac
+ sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' "$f" > "pixtext/$(basename "$f")"
+done
 # kart also has a course package and swaps its track loading.
 rm -rf kart kartmain
 mkdir -p kart/course kart/assets kartmain
@@ -45,6 +52,7 @@ for f in ../../games/kart/*.go ../../games/kart/course/*.go; do
  out="kart/$(basename "$f")"
  case "$f" in */course/*) out="kart/course/$(basename "$f")";; esac
  sed -e 's#"github.com/sat0ken/ikaten/games/kart/course"#"ikaten-compat/kart/course"#' \
+  -e 's#"github.com/sat0ken/ikaten/games/pixtext"#"ikaten-compat/pixtext"#' \
   -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
   -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "$out"
 done
@@ -79,13 +87,6 @@ cp ../../compat/uboat_platform.go.txt uboat/platform_ebitengine.go
 cp ../../games/uboat/assets/*.png uboat/assets/
 cp ../../compat/uboat_main.go.txt uboatmain/main.go
 GOOS=js GOARCH=wasm go build -mod=mod -o ../uboat-ebitengine.wasm ./uboatmain
-# pixtext is the font that the games drawn for 240 by 240 share.
-rm -rf pixtext
-mkdir -p pixtext
-for f in ../../games/pixtext/*.go; do
- case "$f" in *_test.go) continue;; esac
- sed -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' "$f" > "pixtext/$(basename "$f")"
-done
 # shooter is written against the Ebitengine API only.
 mkdir -p shooter shootermain
 for f in ../../games/shooter/*.go; do

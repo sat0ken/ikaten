@@ -2,28 +2,52 @@ package kart
 
 import (
 	"image"
+	"image/color"
 	"math"
 
 	ebiten "github.com/sat0ken/ikaten"
-	"github.com/sat0ken/ikaten/ebitenutil"
+	"github.com/sat0ken/ikaten/games/pixtext"
 )
 
+// trackScale is the track image's texels a world unit (see assets/gen.go).
+const trackScale = 2
+
+var (
+	textWhite  = color.RGBA{250, 250, 250, 255}
+	textYellow = color.RGBA{255, 230, 60, 255}
+	textGray   = color.RGBA{200, 210, 230, 255}
+	textShadow = color.RGBA{20, 24, 40, 255}
+)
+
+var text pixtext.Line
+
 func (g *Game) Draw(screen *ebiten.Image) {
+	mark(0)
 	g.drawSky(screen)
+	mark(1)
 	g.drawGround(screen)
+	mark(2)
 	g.drawSprites(screen)
+	mark(3)
 	g.drawHUD(screen)
+	mark(4)
 }
 
 func (g *Game) drawSky(screen *ebiten.Image) {
-	fillRect(screen, imageSky[0], 0, 0, ScreenWidth, horizon-12)
-	fillRect(screen, imageSky[1], 0, horizon-12, ScreenWidth, 12)
+	// Bands lighter toward the horizon.
+	sky := &g.art.sky
+	band := (horizon - 12) / (len(sky) - 1)
+	for i := range len(sky) - 1 {
+		fillRect(screen, sky[i], 0, i*band, ScreenWidth, band)
+	}
+	fillRect(screen, sky[len(sky)-1], 0, (len(sky)-1)*band, ScreenWidth, horizon-(len(sky)-1)*band)
 	// The mountains turn with the camera, half a strip per turn.
-	width := imageMountains.Bounds().Dx()
+	m := g.art.mountains
+	width := m.Bounds().Dx()
 	shift := int(-g.camAngle / (2 * math.Pi) * float32(width) * 2)
 	shift = (shift%width + width) % width
 	for x := shift - width; x < ScreenWidth; x += width {
-		drawAt(screen, imageMountains, x, horizon-imageMountains.Bounds().Dy())
+		drawAt(screen, m, x, horizon-m.Bounds().Dy())
 	}
 }
 
@@ -37,7 +61,7 @@ func (g *Game) drawGround(screen *ebiten.Image) {
 		}
 		g.rowsOf = screen
 	}
-	fillRect(screen, imageGrass, 0, horizon, ScreenWidth, ScreenHeight-horizon)
+	fillRect(screen, g.art.grass, 0, horizon, ScreenWidth, ScreenHeight-horizon)
 	var op ebiten.DrawImageOptions
 	for y := horizon; y < ScreenHeight; y++ {
 		z := camHeight * focal / (float32(y-horizon) + 0.5)
@@ -51,18 +75,20 @@ func (g *Game) drawGround(screen *ebiten.Image) {
 		px := g.camX + g.fx*z + g.rx*unit*left
 		py := g.camY + g.fy*z + g.ry*unit*left
 		// Track coordinates map to screen x along the right vector and to
-		// screen y along the forward vector; only the row's y is drawn.
-		a, b := g.rx/unit, g.ry/unit
-		c, d := g.fx/unit, g.fy/unit
+		// screen y along the forward vector; only the row's y is drawn. The
+		// track image has trackScale texels a world unit.
+		a, b := g.rx/unit/trackScale, g.ry/unit/trackScale
+		c, d := g.fx/unit/trackScale, g.fy/unit/trackScale
+		px, py = px*trackScale, py*trackScale
 		op.GeoM.SetElement(0, 0, float64(a))
 		op.GeoM.SetElement(0, 1, float64(b))
 		op.GeoM.SetElement(0, 2, float64(-(a*px + b*py)))
 		op.GeoM.SetElement(1, 0, float64(c))
 		op.GeoM.SetElement(1, 1, float64(d))
 		op.GeoM.SetElement(1, 2, float64(float32(y)-(c*px+d*py)))
-		g.rows[y].DrawImage(imageTrack, &op)
+		g.rows[y].DrawImage(g.art.track, &op)
 	}
-	fillRect(screen, imageHaze, 0, horizon, ScreenWidth, 2)
+	fillRect(screen, g.art.haze, 0, horizon, ScreenWidth, 3)
 }
 
 type drawItem struct {
@@ -112,26 +138,26 @@ func (g *Game) drawKart(screen *ebiten.Image, it drawItem) {
 	if k.drift != 0 {
 		frame = k.drift + 1
 	}
-	img := imageKart[it.kart][frame]
+	img := g.art.kart[it.kart][frame]
 	drawScaled(screen, img, it.x, it.y, it.scale)
 	if it.kart != 0 {
 		return
 	}
 	w := float32(img.Bounds().Dx())
 	if k.boost > 0 && g.ticks%4 < 3 {
-		drawScaled(screen, imageFlame, it.x, it.y+3, 1)
+		drawScaled(screen, g.art.flame, it.x, it.y+6, 1)
 	}
 	if k.drift != 0 {
-		spark := imageSpark[0]
+		spark := g.art.spark[0]
 		switch {
 		case k.charge >= driftLong:
-			spark = imageSpark[2]
+			spark = g.art.spark[2]
 		case k.charge >= driftShort:
-			spark = imageSpark[1]
+			spark = g.art.spark[1]
 		}
-		jump := float32(g.ticks % 2)
-		drawScaled(screen, spark, it.x-w/2+2, it.y-jump, 1)
-		drawScaled(screen, spark, it.x+w/2-2, it.y-1+jump, 1)
+		jump := float32(g.ticks%2) * 2
+		drawScaled(screen, spark, it.x-w/2+4, it.y-jump, 1)
+		drawScaled(screen, spark, it.x+w/2-4, it.y-2+jump, 1)
 	}
 }
 
@@ -158,30 +184,10 @@ func fillRect(screen, pixel *ebiten.Image, x, y, width, height int) {
 	screen.DrawImage(pixel, &op)
 }
 
-// drawNumber draws n with the given number of digits, padded with zeros, at
-// scale times the 3x5 font size.
-func drawNumber(screen *ebiten.Image, n, digits, x, y, scale int) {
-	for i := digits - 1; i >= 0; i-- {
-		drawGlyph(screen, n%10, x+i*4*scale, y, scale)
-		n /= 10
-	}
-}
-
-func drawGlyph(screen *ebiten.Image, glyph, x, y, scale int) {
-	var op ebiten.DrawImageOptions
-	op.GeoM.Scale(float64(scale), float64(scale))
-	op.GeoM.Translate(float64(x), float64(y))
-	screen.DrawImage(imageDigits[glyph], &op)
-}
-
-// drawTime draws ticks as m:ss.cc.
-func drawTime(screen *ebiten.Image, ticks, x, y int) {
+// clock adds ticks as m:ss.cc to the line.
+func clock(l *pixtext.Line, ticks int) *pixtext.Line {
 	cs := ticks * 100 / 60
-	drawNumber(screen, cs/6000%10, 1, x, y, 1)
-	drawGlyph(screen, glyphColon, x+3, y, 1)
-	drawNumber(screen, cs/100%60, 2, x+6, y, 1)
-	drawGlyph(screen, glyphDot, x+13, y, 1)
-	drawNumber(screen, cs%100, 2, x+16, y, 1)
+	return l.Num(cs/6000%10).Str(":").Pad(cs/100%60, 2).Str(".").Pad(cs%100, 2)
 }
 
 var (
@@ -190,33 +196,33 @@ var (
 )
 
 func (g *Game) drawHUD(screen *ebiten.Image) {
+	const mid = ScreenWidth / 2
 	switch g.mode {
 	case modeTitle:
-		ebitenutil.DebugPrintAt(screen, "IKATEN KART", 27, 2)
+		text.Reset().Str("IKATEN KART").Shade(textShadow).Center(screen, mid, 10, 3, textYellow)
 		if g.modeTicks/30%2 == 0 {
-			ebitenutil.DebugPrintAt(screen, "PRESS Z", 39, 40)
+			text.Reset().Str("PRESS A").Shade(textShadow).Center(screen, mid, 90, 2, textWhite)
 		}
-		ebitenutil.DebugPrintAt(screen, "Z:GAS X:DRIFT", 21, 106)
+		text.Reset().Str("A: GAS   B: DRIFT").Shade(textShadow).Center(screen, mid, 222, 1, textWhite)
 		return
 	case modeCountdown:
 		if n := 3 - g.modeTicks/60; n > 0 {
-			drawNumber(screen, n, 1, 54, 46, 4)
+			text.Reset().Num(n).Shade(textShadow).Center(screen, mid, 84, 6, textYellow)
 		}
 	}
 	k := &g.karts[0]
-	ebitenutil.DebugPrintAt(screen, lapLabels[min(max(k.lap+1, 1), laps)-1], 2, -2)
-	drawTime(screen, g.raceTicks, 2, 10)
-	ebitenutil.DebugPrintAt(screen, ordinals[g.position(0)-1], 98, -2)
+	text.Reset().Str(lapLabels[min(max(k.lap+1, 1), laps)-1]).Shade(textShadow).Draw(screen, 4, 4, 1, textWhite)
+	clock(text.Reset(), g.raceTicks).Shade(textShadow).Draw(screen, 4, 16, 1, textWhite)
+	text.Reset().Str(ordinals[g.position(0)-1]).Shade(textShadow).Right(screen, ScreenWidth-4, 4, 2, textYellow)
 	switch {
 	case g.mode == modeRace && g.modeTicks < 50:
-		ebitenutil.DebugPrintAt(screen, "GO!", 51, 40)
+		text.Reset().Str("GO!").Shade(textShadow).Center(screen, mid, 84, 4, textYellow)
 	case g.mode == modeResult:
-		ebitenutil.DebugPrintAt(screen, "FINISH!", 39, 36)
-		ebitenutil.DebugPrintAt(screen, ordinals[g.position(0)-1], 51, 48)
-		ebitenutil.DebugPrintAt(screen, "BEST", 30, 62)
-		drawTime(screen, g.bestLap, 60, 67)
+		text.Reset().Str("FINISH!").Shade(textShadow).Center(screen, mid, 70, 3, textWhite)
+		text.Reset().Str(ordinals[g.position(0)-1]).Shade(textShadow).Center(screen, mid, 100, 3, textYellow)
+		clock(text.Reset().Str("BEST "), g.bestLap).Shade(textShadow).Center(screen, mid, 132, 1, textWhite)
 		if g.modeTicks > 90 {
-			ebitenutil.DebugPrintAt(screen, "PRESS Z", 39, 76)
+			text.Reset().Str("PRESS A").Shade(textShadow).Center(screen, mid, 152, 2, textGray)
 		}
 	}
 }

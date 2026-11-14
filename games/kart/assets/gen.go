@@ -1,7 +1,8 @@
 //go:build ignore
 
-// gen paints track.png, the kart circuit seen from above, from package course.
-// Usage: go run gen.go, then run go generate in games/kart.
+// gen paints track.png, the kart circuit seen from above, from package course,
+// at scale texels a world unit. Usage: go run gen.go, then run go generate in
+// games/kart.
 package main
 
 import (
@@ -15,7 +16,12 @@ import (
 	"github.com/sat0ken/ikaten/games/kart/course"
 )
 
+// scale is texels a world unit; the game draws with the same.
+const scale = 2
+
 var (
+	edgeLine  = color.RGBA{220, 220, 210, 255}
+	grassDark = color.RGBA{44, 132, 54, 255}
 	asphalt   = color.RGBA{96, 96, 108, 255}
 	curbRed   = color.RGBA{220, 40, 40, 255}
 	curbWhite = color.RGBA{235, 235, 235, 255}
@@ -49,12 +55,23 @@ func wrapped(a, b, length float32) float32 {
 	return d
 }
 
+// texel is the color at texel x, y.
 func texel(x, y int) color.RGBA {
+	return at(float32(x)/scale, float32(y)/scale, x, y)
+}
+
+// at is the color at world point wx, wy, which is texel x, y.
+func at(wx, wy float32, x, y int) color.RGBA {
 	const edge = course.Wall - 2
-	if x < edge || y < edge || x >= course.Size-edge || y >= course.Size-edge {
+	if wx < edge || wy < edge || wx >= course.Size-edge || wy >= course.Size-edge {
+		// The wall, in blocks with a lit top.
+		if (x+y)%8 < 2 {
+			return shade(wall, 30)
+		}
 		return wall
 	}
-	w := course.Locate(float32(x)+.5, float32(y)+.5, 0, -1)
+	half := float32(0.5) / scale
+	w := course.Locate(wx+half, wy+half, 0, -1)
 	switch {
 	case w.Dist < course.HalfWidth:
 		// The start line is a checkered band across the road at s = 0.
@@ -75,6 +92,9 @@ func texel(x, y int) color.RGBA {
 				return padYellow
 			}
 		}
+		if w.Dist > course.HalfWidth-0.75 {
+			return edgeLine // a white line inside the curbs
+		}
 		return shade(asphalt, noise(x, y))
 	case w.Dist < course.HalfWidth+course.CurbWidth:
 		if int(w.S/3)%2 == 0 {
@@ -82,16 +102,21 @@ func texel(x, y int) color.RGBA {
 		}
 		return curbWhite
 	}
-	if (x/8+y/8)%2 == 0 {
-		return grassA
+	// Mown grass in stripes, darker along the road's outside.
+	if w.Dist < course.HalfWidth+course.CurbWidth+1.5 {
+		return grassDark
 	}
-	return grassB
+	if int(wx/8+wy/8)%2 == 0 {
+		return shade(grassA, noise(x, y)/2)
+	}
+	return shade(grassB, noise(x, y)/2)
 }
 
 func main() {
-	img := image.NewRGBA(image.Rect(0, 0, course.Size, course.Size))
-	for y := range course.Size {
-		for x := range course.Size {
+	const n = course.Size * scale
+	img := image.NewRGBA(image.Rect(0, 0, n, n))
+	for y := range n {
+		for x := range n {
 			img.SetRGBA(x, y, texel(x, y))
 		}
 	}
