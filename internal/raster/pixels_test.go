@@ -176,3 +176,65 @@ func TestSolidParallelogram(t *testing.T) {
 		}
 	}
 }
+
+// A one-pixel-wide image stretched or shrunk down, a whole number of pixels
+// wide, as a raycaster's walls, takes the column path. It may differ from
+// the general path only where a row's center sits on a texel's edge.
+func TestColumnNearlyMatchesGeneral(t *testing.T) {
+	rng := uint32(99)
+	random := func() float32 {
+		rng ^= rng << 13
+		rng ^= rng >> 17
+		rng ^= rng << 5
+		return float32(rng%100000) / 100000
+	}
+	const w, h = 5, 32
+	pixels, mask := make([]uint16, w*h), make([]byte, (w*h+7)/8)
+	for i := range pixels {
+		pixels[i] = uint16(i*7919 + 3)
+		if i%3 != 0 {
+			mask[i>>3] |= 1 << uint(i&7)
+		}
+	}
+	differing, total := 0, 0
+	for k := range 3000 {
+		// One column of a wider image, as SubImage gives.
+		col := 1 + k%3
+		buf := &Buffer{Pixels: pixels, Mask: mask}
+		if k%2 == 0 {
+			buf = &Buffer{Pixels: pixels, Opaque: true}
+		}
+		src := View{Buffer: buf, Bounds: image.Rect(col, 0, col+1, h), Stride: w, Offset: col}
+		o := Options{A: float32(1 + k%3), D: 0.1 + random()*12, TX: float32(int(random()*80) - 10), TY: random()*120 - 40,
+			R: 256, G: 256, Blue: 256, Alpha: 256}
+		if k%5 == 0 {
+			o.R, o.Blue = 180, 90 // shaded
+		}
+		if k%7 == 0 {
+			o.Blend = Copy
+		}
+		var got, want View
+		for i, v := range []*View{&got, &want} {
+			dp := make([]uint16, 64*96)
+			dm := make([]byte, 64*96/8)
+			for j := range dp {
+				dp[j] = 0x1111
+				if j%2 == 0 {
+					dm[j>>3] |= 1 << uint(j&7)
+				}
+			}
+			*v = View{Buffer: &Buffer{Pixels: dp, Mask: dm}, Bounds: image.Rect(0, 0, 64, 96), Stride: 64}
+			draw(*v, src, o, i == 1)
+		}
+		for i := range got.Buffer.Pixels {
+			total++
+			if got.Buffer.Pixels[i] != want.Buffer.Pixels[i] || got.Buffer.Visible(i) != want.Buffer.Visible(i) {
+				differing++
+			}
+		}
+	}
+	if differing*10000 > total {
+		t.Fatalf("%d of %d pixels differ", differing, total)
+	}
+	t.Logf("%d of %d pixels differ", differing, total)
+}

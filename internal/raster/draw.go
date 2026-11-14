@@ -41,6 +41,12 @@ func draw(dst, src View, o Options, forceGeneral bool) {
 		mirrored(dst, src, o)
 		return
 	}
+	if !forceGeneral && o.B == 0 && o.C == 0 && src.Bounds.Dx() == 1 && o.A >= 1 && o.A <= 64 && o.A == float32(int(o.A)) &&
+		o.TX >= -1e7 && o.TX <= 1e7 && o.TX == float32(int(o.TX)) && o.D > 1e-6 && o.D <= 32767 && o.TY >= -1e7 && o.TY <= 1e7 &&
+		o.Alpha == 256 && o.Blend != Lighter {
+		column(dst, src, o)
+		return
+	}
 	if !forceGeneral && o.B == 0 && o.C == 0 && scaled(dst, src, o) {
 		return
 	}
@@ -559,6 +565,77 @@ func mirrored(dst, src View, o Options) {
 			}
 		}
 	}
+}
+
+// column draws a one-pixel-wide image stretched or shrunk down, a whole
+// number of pixels wide at a whole pixel across, at full alpha: a
+// raycaster's wall. The rows of each source pixel, those whose centers fall
+// within it, are worked out once and written as a run, where the scaled
+// path worked out every row. Sampling can differ from the general path only
+// where a row's center falls within float32 rounding of a texel's edge.
+func column(dst, src View, o Options) {
+	tx := int(o.TX)
+	x0, x1 := max(dst.Bounds.Min.X, tx), min(dst.Bounds.Max.X, tx+int(o.A))
+	if x0 >= x1 {
+		return
+	}
+	n := x1 - x0
+	db, sb := dst.Buffer, src.Buffer
+	pixels, mask, smask := db.Pixels, db.Mask, sb.Mask
+	opaque := sb.Opaque || smask == nil
+	// An opaque destination's mask bits are already set.
+	marking := !db.Opaque && mask != nil
+	tinted := o.R != 256 || o.G != 256 || o.Blue != 256
+	ymin, ymax := dst.Bounds.Min.Y, dst.Bounds.Max.Y
+	h := src.Bounds.Dy()
+	// Row y's center samples texel t where t*D <= y+0.5-TY < (t+1)*D.
+	top := ceilInt(o.TY - 0.5)
+	for t := range h {
+		next := ceilInt(float32(t+1)*o.D + o.TY - 0.5)
+		a, b := max(top, ymin), min(next, ymax)
+		top = next
+		if a >= b {
+			if a >= ymax {
+				return
+			}
+			continue
+		}
+		p := src.Offset + t*src.Stride
+		if !opaque && smask[p>>3]&(1<<uint(p&7)) == 0 {
+			if o.Blend == Copy {
+				for y := a; y < b; y++ {
+					di := dst.Index(x0, y)
+					for i := range n {
+						db.Set(di+i, 0, false)
+					}
+				}
+				marking = mask != nil
+			}
+			continue
+		}
+		v := sb.Pixel(p)
+		if tinted {
+			v = tint(v, &o)
+		}
+		di := dst.Index(x0, a)
+		for y := a; y < b; y, di = y+1, di+dst.Stride {
+			for i := range n {
+				pixels[di+i] = v
+			}
+			if marking {
+				db.SetMaskRange(di, n, true)
+			}
+		}
+	}
+}
+
+// ceilInt rounds up to a whole number, for either sign.
+func ceilInt(f float32) int {
+	i := int(f)
+	if float32(i) < f {
+		i++
+	}
+	return i
 }
 
 func opaqueRow(dst *Buffer, di int, src *Buffer, si, n int) {
