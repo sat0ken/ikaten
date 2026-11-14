@@ -4,6 +4,8 @@ import (
 	"math"
 	"testing"
 
+	ebiten "github.com/sat0ken/ikaten"
+
 	"github.com/sat0ken/ikaten/games/tank/field"
 )
 
@@ -194,4 +196,36 @@ func TestStartsClear(t *testing.T) {
 			}
 		}
 	}
+}
+
+// Drawing allocates nothing, in the wide and the zoomed view, with puffs,
+// shells and the banners.
+func TestDrawAllocs(t *testing.T) {
+	screen := ebiten.NewImage(ScreenWidth, ScreenHeight)
+	g := NewGame()
+	check := func(name string) {
+		t.Helper()
+		g.Draw(screen)
+		if n := testing.AllocsPerRun(5, func() { g.ticks++; g.Draw(screen) }); n != 0 {
+			t.Errorf("%s: %v allocations", name, n)
+		}
+	}
+	check("title")
+	g, e := battle(medium, 400, 0)
+	g.layGun(e)
+	g.fire()
+	for range 20 {
+		g.step()
+	}
+	g.say(msgRicochet)
+	g.shake, g.hurt, g.hitTicks = 6, 6, 6
+	check("wide")
+	g.zoomed = true
+	check("zoomed")
+	g.setMode(modeClear)
+	g.modeTicks = 120
+	check("clear")
+	g.setMode(modeOver)
+	g.modeTicks = 120
+	check("over")
 }

@@ -1,9 +1,9 @@
 //go:build ignore
 
 // gen paints the tank game's assets from package field: ground.png, the
-// battlefield seen from above, sprites.png, the sprite sheet, and sight.png, the
-// zoomed gunsight's mask. Tanks and
-// houses are boxes, ray cast from each direction.
+// battlefield seen from above, sprites.png, the sprite sheet, and hills.png,
+// the distant hills on the sky. Tanks and houses are boxes, ray cast from each
+// direction.
 // Usage: go run gen.go, then run go generate in games/tank.
 package main
 
@@ -70,6 +70,10 @@ func ground() image.Image {
 				c = shade(c, 10)
 			}
 			c = shade(c, int(hash(tx, ty)%11)-5)
+			// A darker line where one field meets the next.
+			if math.Mod(wy+field.Half, 72) < field.TexelMeters || math.Mod(wx+field.Half+float64(hash(row, 7)%60), 88) < field.TexelMeters {
+				c = shade(c, -16)
+			}
 			for _, line := range field.Roads {
 				for i := 1; i < len(line); i++ {
 					d := segmentDistance(wx, wy, float64(line[i-1].X), float64(line[i-1].Y), float64(line[i].X), float64(line[i].Y))
@@ -197,15 +201,32 @@ var tanks = [field.TankKinds]tankModel{
 }
 
 func (m tankModel) hull() []box {
-	track := color.NRGBA{48, 46, 44, 255}
+	track, wheel := color.NRGBA{48, 46, 44, 255}, color.NRGBA{78, 76, 72, 255}
 	l, w := m.length/2, m.width/2
-	return []box{
-		{-l, -w, 0, l, -w + 0.7, m.hullLow + 0.6, track},
-		{-l, w - 0.7, 0, l, w, m.hullLow + 0.6, track},
+	boxes := []box{
+		{-l, -w, 0.1, l, -w + 0.7, m.hullLow + 0.6, track},
+		{-l, w - 0.7, 0.1, l, w, m.hullLow + 0.6, track},
+		{-l + 0.3, -w, 0, l - 0.3, -w + 0.7, 0.15, track},
+		{-l + 0.3, w - 0.7, 0, l - 0.3, w, 0.15, track},
 		{-l + 0.2, -w + 0.15, m.hullLow, l - 0.6, w - 0.15, m.hullTop, m.body},
 		{l - 0.6, -w + 0.25, m.hullLow, l - 0.1, w - 0.25, m.hullTop - 0.35, scale(m.body, 0.9)},
 		{-l + 0.1, -w + 0.4, m.hullTop, -l + 0.9, w - 0.4, m.hullTop + 0.15, scale(m.body, 0.8)},
+		// Track guards over the tracks.
+		{-l + 0.1, -w - 0.05, m.hullLow + 0.6, l - 0.2, -w + 0.75, m.hullLow + 0.7, scale(m.body, 0.85)},
+		{-l + 0.1, w - 0.75, m.hullLow + 0.6, l - 0.2, w + 0.05, m.hullLow + 0.7, scale(m.body, 0.85)},
+		// Exhausts at the rear, a hull gun at the front.
+		{-l - 0.15, -w + 0.6, m.hullLow + 0.2, -l + 0.2, -w + 0.9, m.hullLow + 0.6, color.NRGBA{60, 50, 44, 255}},
+		{-l - 0.15, w - 0.9, m.hullLow + 0.2, -l + 0.2, w - 0.6, m.hullLow + 0.6, color.NRGBA{60, 50, 44, 255}},
+		{l - 0.1, -w + 0.5, m.hullTop - 0.6, l + 0.3, -w + 0.65, m.hullTop - 0.45, scale(m.body, 0.6)},
 	}
+	// Road wheels on the outer face of each track.
+	for i := range 5 {
+		x := -l + 0.7 + float64(i)*(m.length-1.4)/4
+		boxes = append(boxes,
+			box{x - 0.3, -w - 0.04, 0.15, x + 0.3, -w + 0.1, 0.75, wheel},
+			box{x - 0.3, w - 0.1, 0.15, x + 0.3, w + 0.04, 0.75, wheel})
+	}
+	return boxes
 }
 
 func (m tankModel) turret() []box {
@@ -216,6 +237,10 @@ func (m tankModel) turret() []box {
 		{m.turretFront, -tw * 0.55, m.hullTop + 0.15, m.turretFront + 0.35, tw * 0.55, m.turretTop - 0.15, scale(m.body, 0.85)},
 		{m.turretFront + 0.35, -gunY, gunZ - gunY, m.gun, gunY, gunZ + gunY, scale(m.body, 0.7)},
 		{m.turretBack + 0.3, -tw + 0.25, m.turretTop, m.turretBack + 0.9, -tw + 0.85, m.turretTop + 0.25, scale(m.body, 0.9)},
+		// A muzzle brake, a stowage box at the back and an antenna.
+		{m.gun - 0.3, -gunY * 1.6, gunZ - gunY*1.6, m.gun, gunY * 1.6, gunZ + gunY*1.6, scale(m.body, 0.55)},
+		{m.turretBack - 0.35, -tw + 0.3, m.hullTop + 0.2, m.turretBack, tw - 0.3, m.turretTop - 0.3, scale(m.body, 0.75)},
+		{m.turretBack + 0.2, tw - 0.4, m.turretTop, m.turretBack + 0.28, tw - 0.32, m.turretTop + 1.4, color.NRGBA{40, 40, 40, 255}},
 	}
 }
 
@@ -235,15 +260,20 @@ func house() []box {
 }
 
 func tree(dst *image.NRGBA, ox, oy int, pine bool) {
+	const k = field.TreeW / 20 // the tree was drawn 20 pixels wide
 	trunk := color.NRGBA{92, 66, 44, 255}
-	for y := 30; y < field.TreeH; y++ {
-		for x := 9; x < 11; x++ {
-			dst.SetNRGBA(ox+x, oy+y, trunk)
+	for y := 30 * k; y < field.TreeH; y++ {
+		for x := 9 * k; x < 11*k; x++ {
+			c := trunk
+			if x == 9*k {
+				c = shade(trunk, 18)
+			}
+			dst.SetNRGBA(ox+x, oy+y, c)
 		}
 	}
-	for y := range 34 {
+	for y := range 34 * k {
 		for x := range field.TreeW {
-			fx, fy := float64(x)+.5-10, float64(y)+.5
+			fx, fy := (float64(x)+.5)/k-10, (float64(y)+.5)/k
 			var in bool
 			var lit float64
 			if pine {
@@ -251,12 +281,14 @@ func tree(dst *image.NRGBA, ox, oy int, pine bool) {
 				tier := math.Mod(fy, 11)
 				half := 2 + tier*0.55 + fy*0.12
 				in = fy > 0 && math.Abs(fx) < half
-				lit = -fx / half
+				lit = -fx/half - tier/22
 			} else {
 				dx, dy := fx, (fy-17)*1.05
 				r := 9 + 1.2*math.Sin(math.Atan2(dy, dx)*5)
 				in = fy > 4 && math.Hypot(dx, dy) < r
-				lit = (-dx - dy) / 12
+				// Clumps of leaves, each lit from the top left.
+				cx, cy := math.Mod(fx+20, 4)-2, math.Mod(fy, 4)-2
+				lit = (-dx-dy)/12 + (-cx-cy)/8
 			}
 			if !in {
 				continue
@@ -271,22 +303,40 @@ func tree(dst *image.NRGBA, ox, oy int, pine bool) {
 	}
 }
 
-func hills(dst *image.NRGBA, ox, oy int) {
+// The sky behind the hills, as in art.go: its low band starts lowBand rows
+// above the horizon.
+var (
+	sky, skyLow = color.NRGBA{96, 146, 214, 255}, color.NRGBA{172, 200, 228, 255}
+)
+
+const lowBand = 24
+
+// hills paints the distant hills, with trees along their feet, on the sky,
+// so that the strip is opaque: masked images are slow to draw on the badge.
+func hills() image.Image {
+	img := image.NewNRGBA(image.Rect(0, 0, field.HillsW, field.HillsH))
 	far, near := color.NRGBA{142, 160, 184, 255}, color.NRGBA{76, 112, 82, 255}
 	for x := range field.HillsW {
 		t := 2 * math.Pi * float64(x) / field.HillsW
-		hill := 8 + 3*math.Sin(2*t) + 2*math.Sin(5*t+1) + math.Sin(11*t+2)
-		trees := 2.5 + math.Sin(9*t) + float64(hash(x/2, 0)%3)
+		hill := 2 * (8 + 3*math.Sin(2*t) + 2*math.Sin(5*t+1) + math.Sin(11*t+2))
+		trees := 2 * (2.5 + math.Sin(9*t) + float64(hash(x/3, 0)%3))
 		for y := range field.HillsH {
 			h := float64(field.HillsH - y)
+			c := sky
+			if field.HillsH-y <= lowBand {
+				c = skyLow
+			}
 			switch {
 			case h <= trees:
-				dst.SetNRGBA(ox+x, oy+y, shade(near, int(hash(x, y)%9)-4))
+				c = shade(near, int(hash(x, y)%13)-6)
 			case h <= hill:
-				dst.SetNRGBA(ox+x, oy+y, far)
+				// Lighter toward the hilltops, farther away in the haze.
+				c = shade(far, int((h-trees)*1.5))
 			}
+			img.SetNRGBA(x, y, c)
 		}
 	}
+	return img
 }
 
 func sheet() image.Image {
@@ -305,29 +355,11 @@ func sheet() image.Image {
 	}
 	tree(img, field.TreeX, field.HouseY, false)
 	tree(img, field.TreeX+field.TreeW, field.HouseY, true)
-	hills(img, 0, field.HillsY)
-	return img
-}
-
-// sight is the gunsight's eyepiece: black outside a circle with a dark rim.
-func sight() image.Image {
-	img := image.NewNRGBA(image.Rect(0, 0, field.SightW, field.SightH))
-	for y := range field.SightH {
-		for x := range field.SightW {
-			d := math.Hypot(float64(x)+.5-field.SightX, float64(y)+.5-field.SightY)
-			switch {
-			case d > field.SightRadius+2:
-				img.SetNRGBA(x, y, color.NRGBA{8, 10, 8, 255})
-			case d > field.SightRadius:
-				img.SetNRGBA(x, y, color.NRGBA{40, 44, 40, 255})
-			}
-		}
-	}
 	return img
 }
 
 func main() {
-	for name, img := range map[string]image.Image{"ground.png": ground(), "sprites.png": sheet(), "sight.png": sight()} {
+	for name, img := range map[string]image.Image{"ground.png": ground(), "sprites.png": sheet(), "hills.png": hills()} {
 		out, err := os.Create(name)
 		if err != nil {
 			log.Fatal(err)

@@ -68,6 +68,7 @@ for f in ../../games/tank/*.go ../../games/tank/field/*.go; do
  out="tank/$(basename "$f")"
  case "$f" in */field/*) out="tank/field/$(basename "$f")";; esac
  sed -e 's#"github.com/sat0ken/ikaten/games/tank/field"#"ikaten-compat/tank/field"#' \
+  -e 's#"github.com/sat0ken/ikaten/games/pixtext"#"ikaten-compat/pixtext"#' \
   -e 's#ebiten "github.com/sat0ken/ikaten"#"github.com/hajimehoshi/ebiten/v2"#' \
   -e 's#"github.com/sat0ken/ikaten/#"github.com/hajimehoshi/ebiten/v2/#' "$f" > "$out"
 done

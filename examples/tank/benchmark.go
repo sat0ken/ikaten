@@ -34,6 +34,9 @@ func (g *bench) Update() error {
 		runtime.ReadMemStats(&mem)
 		if n > 0 {
 			println("frames=", n, " tps=", int(ebiten.ActualTPS()), " update_us/frame=", (current.Update-g.stats.Update).Microseconds()/int64(n), " draw_us/frame=", (current.Draw-g.stats.Draw).Microseconds()/int64(n), " present_us/frame=", (current.Present-g.stats.Present).Microseconds()/int64(n), " heap=", mem.HeapAlloc, " gc=", mem.NumGC, " longest_gap_us=", g.longestUpdate.Microseconds())
+			// Where Draw's time went, in microseconds a frame.
+			t := tank.SectionTimes()
+			println("  sky=", t[0].Microseconds()/int64(n), " ground=", t[1].Microseconds()/int64(n), " world=", t[2].Microseconds()/int64(n), " sight=", t[3].Microseconds()/int64(n))
 		}
 		g.stats = current
 		g.last = now
