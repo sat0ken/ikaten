@@ -78,8 +78,8 @@ type sprites struct {
 	spark     [3]*ebiten.Image // dust, blue, orange
 	mountains *ebiten.Image
 	sky       [4]*ebiten.Image // from the top down
-	grass     *ebiten.Image
 	haze      *ebiten.Image
+	row       *ebiten.Image // a row of the ground, drawn before it is copied
 }
 
 func sprite(rows []string, colors map[byte]color.RGBA) *ebiten.Image {
@@ -172,7 +172,7 @@ func newSprites() *sprites {
 	for i, c := range [4]color.RGBA{{60, 116, 220, 255}, {80, 140, 232, 255}, {110, 166, 240, 255}, {150, 196, 248, 255}} {
 		a.sky[i] = pixel(c)
 	}
-	a.grass = pixel(color.RGBA{58, 160, 66, 255})
+	a.row = ebiten.NewImage(ScreenWidth, 1)
 	a.haze = pixel(color.RGBA{170, 205, 220, 255})
 	return a
 }

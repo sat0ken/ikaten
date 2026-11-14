@@ -1,7 +1,6 @@
 package kart
 
 import (
-	"image"
 	"image/color"
 	"math"
 
@@ -53,43 +52,54 @@ func (g *Game) drawSky(screen *ebiten.Image) {
 
 // drawGround draws each row of the floor as a rotated and scaled row of the
 // track: the farther the row, the more track it covers.
+// groundStep is how many screen rows each row drawn from the track covers.
+// On the badge a pixel taken from the track in flash through a rotation
+// cost about half a microsecond, and every row of the ground took 21 to 24
+// ms; a row twice as tall halves it.
+const groundStep = 2
+
+// drawGround draws the floor as rows of the track rotated and scaled: the
+// farther the row, the more track it covers. Each is drawn into a buffer a
+// row tall over grass, and copied groundStep rows tall onto the screen.
 func (g *Game) drawGround(screen *ebiten.Image) {
-	if g.rowsOf != screen {
-		// SubImage allocates, so the rows are cut once per screen image.
-		for y := horizon; y < ScreenHeight; y++ {
-			g.rows[y] = screen.SubImage(image.Rect(0, y, ScreenWidth, y+1)).(*ebiten.Image)
+	row := g.art.row
+	var op, copyOp ebiten.DrawImageOptions
+	for y := horizon; y < ScreenHeight; y += groundStep {
+		h := min(groundStep, ScreenHeight-y)
+		z := camHeight * focal / (float32(y-horizon) + float32(h)/2)
+		row.Fill(grassColor) // also marks it opaque, so it is copied fast
+		if z <= farthest {
+			// One screen pixel covers unit world units. The row starts at
+			// the left edge of the view, z ahead of the camera.
+			unit := z / focal
+			left := float32(-ScreenWidth / 2)
+			px := g.camX + g.fx*z + g.rx*unit*left
+			py := g.camY + g.fy*z + g.ry*unit*left
+			// Track coordinates map to x along the right vector and to y
+			// along the forward vector; only the buffer's row, at y 0, is
+			// drawn. The track image has trackScale texels a world unit.
+			a, b := g.rx/unit/trackScale, g.ry/unit/trackScale
+			c, d := g.fx/unit/trackScale, g.fy/unit/trackScale
+			px, py = px*trackScale, py*trackScale
+			op.GeoM.SetElement(0, 0, float64(a))
+			op.GeoM.SetElement(0, 1, float64(b))
+			op.GeoM.SetElement(0, 2, float64(-(a*px + b*py)))
+			op.GeoM.SetElement(1, 0, float64(c))
+			op.GeoM.SetElement(1, 1, float64(d))
+			op.GeoM.SetElement(1, 2, float64(-(c*px + d*py)))
+			row.DrawImage(g.art.track, &op)
 		}
-		g.rowsOf = screen
-	}
-	fillRect(screen, g.art.grass, 0, horizon, ScreenWidth, ScreenHeight-horizon)
-	var op ebiten.DrawImageOptions
-	for y := horizon; y < ScreenHeight; y++ {
-		z := camHeight * focal / (float32(y-horizon) + 0.5)
-		if z > farthest {
-			continue
-		}
-		// One screen pixel covers unit world units. The row starts at the
-		// left edge of the view, z ahead of the camera.
-		unit := z / focal
-		left := float32(-ScreenWidth / 2)
-		px := g.camX + g.fx*z + g.rx*unit*left
-		py := g.camY + g.fy*z + g.ry*unit*left
-		// Track coordinates map to screen x along the right vector and to
-		// screen y along the forward vector; only the row's y is drawn. The
-		// track image has trackScale texels a world unit.
-		a, b := g.rx/unit/trackScale, g.ry/unit/trackScale
-		c, d := g.fx/unit/trackScale, g.fy/unit/trackScale
-		px, py = px*trackScale, py*trackScale
-		op.GeoM.SetElement(0, 0, float64(a))
-		op.GeoM.SetElement(0, 1, float64(b))
-		op.GeoM.SetElement(0, 2, float64(-(a*px + b*py)))
-		op.GeoM.SetElement(1, 0, float64(c))
-		op.GeoM.SetElement(1, 1, float64(d))
-		op.GeoM.SetElement(1, 2, float64(float32(y)-(c*px+d*py)))
-		g.rows[y].DrawImage(g.art.track, &op)
+		copyOp.GeoM.Reset()
+		copyOp.GeoM.Scale(1, float64(h))
+		copyOp.GeoM.Translate(0, float64(y))
+		screen.DrawImage(row, &copyOp)
 	}
 	fillRect(screen, g.art.haze, 0, horizon, ScreenWidth, 3)
 }
+
+// grassColor is the grass beyond the track, as a color.Color made once:
+// making one each frame would allocate.
+var grassColor color.Color = color.RGBA{58, 160, 66, 255}
 
 type drawItem struct {
 	z     float32

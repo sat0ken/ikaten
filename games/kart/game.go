@@ -90,8 +90,6 @@ type Game struct {
 	// The camera: position, angle and its forward and right vectors.
 	camX, camY, camAngle float32
 	fx, fy, rx, ry       float32
-	rows                 [ScreenHeight]*ebiten.Image // one-row subimages of the screen
-	rowsOf               *ebiten.Image
 	sprites              [karts]drawItem
 }
 
