@@ -37,7 +37,7 @@ make wasm GAME=all          # 全ゲームを選んで遊べるランチャー(A
 tinygo flash -target ./targets/badge.json ./examples/bounce
 ```
 
-`TARGET` は `badge` / `esp32s3` / `esp32` / `pico` / `gopher-badge` / `gopher-board`。配線と解像度は[ハードウェア設定](docs/hardware.md)に記載しています。通常のGoビルドは画面を開かないHeadlessバックエンドを使用します。
+`TARGET` は `badge` / `esp32s3` / `esp32` / `esp32-3248s035c-s3` / `esp32-3248s035c` / `pico` / `gopher-badge` / `gopher-board`。`esp32-3248s035c-s3` はESP32 CYD 3.5インチ(ESP32-3248S035C)のモジュールをESP32-S3に載せ替えた基板で、ミニジョイスティックモジュールで操作します。配線と解像度は[ハードウェア設定](docs/hardware.md)に記載しています。通常のGoビルドは画面を開かないHeadlessバックエンドを使用します。
 
 バッジではジョイスティックで移動、SW1で色変更、SW2で一時停止。ブラウザでは矢印、Z、Xが対応します。ブラウザ画面のボタンでも操作できます。
 
@@ -119,7 +119,7 @@ func loadSprite() (*ikaten.Image, error) {
 ```sh
 make check                   # 単体テスト・vet・計測タグ付きテスト
 go test -race ./...
-make smoketest               # 18サンプル×6ボード + 17サンプル×WASM = 125ビルド
+make smoketest               # 19サンプル×8ボード(RAMとフラッシュに入らない24本を除く128ビルド) + 17サンプル×WASM = 145ビルド
 make compat                  # bounce、snake、flappy、blocks、dungeon、shooter、kart、uboat、tank、train、air、fish、bomb、jump、allをEbitengine v2.10.5でWASMビルド
 make allocs                  # TinyGoの確保箇所を表示
 make probe                   # SPI周波数別の測定用ファームウェア

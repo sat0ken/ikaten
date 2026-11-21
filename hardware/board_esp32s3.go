@@ -1,4 +1,4 @@
-//go:build tinygo && esp32s3 && !ikaten_badge
+//go:build tinygo && esp32s3 && !ikaten_badge && !ikaten_esp32_3248s035c
 
 package hardware
 

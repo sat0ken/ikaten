@@ -24,14 +24,23 @@ type Writer interface {
 }
 type Stats struct{ ChangedRows, Bytes int }
 type Presenter struct {
-	Width, Height                              int
+	Width, Height int
+	// Fractional lets the logical image grow by a fraction to fill more of
+	// the display, 240 rows to 320 for example. Pixels are repeated by
+	// nearest neighbour, so some become wider than others. Without it the
+	// scale is a whole number.
+	Fractional                                 bool
 	logicalWidth, logicalHeight, scale, ox, oy int
-	words                                      []uint16
-	row                                        []byte // words viewed as bytes
-	hashes                                     []uint32
-	valid                                      []bool
-	cleared                                    bool
-	Stats                                      Stats
+	// The fractional scale is num/den; cols[x] is the first output column
+	// of logical column x, and cols[w] the output width.
+	num, den int
+	cols     []uint16
+	words    []uint16
+	row      []byte // words viewed as bytes
+	hashes   []uint32
+	valid    []bool
+	cleared  bool
+	Stats    Stats
 }
 
 func (p *Presenter) configure(w, h int) error {
@@ -43,8 +52,27 @@ func (p *Presenter) configure(w, h int) error {
 	}
 	p.logicalWidth, p.logicalHeight = w, h
 	p.scale = min(p.Width/w, p.Height/h)
-	p.ox, p.oy = (p.Width-w*p.scale)/2, (p.Height-h*p.scale)/2
-	p.words = make([]uint16, max(p.Width, w*p.scale*min(p.scale, 2)))
+	p.num, p.den, p.cols = 0, 0, nil
+	if p.Fractional {
+		// The largest scale that fits, as a fraction of the limiting side.
+		num, den := p.Width, w
+		if p.Height*w < p.Width*h {
+			num, den = p.Height, h
+		}
+		if num%den != 0 {
+			p.num, p.den = num, den
+			p.cols = make([]uint16, w+1)
+			for x := range p.cols {
+				p.cols[x] = uint16(x * num / den)
+			}
+		}
+	}
+	outW, outH, rows := w*p.scale, h*p.scale, min(p.scale, 2)
+	if p.num > 0 {
+		outW, outH, rows = w*p.num/p.den, h*p.num/p.den, min((p.num+p.den-1)/p.den, 2)
+	}
+	p.ox, p.oy = (p.Width-outW)/2, (p.Height-outH)/2
+	p.words = make([]uint16, max(p.Width, outW*rows))
 	p.row = wordBytes(p.words)
 	p.hashes = make([]uint32, h)
 	p.valid = make([]bool, h)
@@ -87,6 +115,9 @@ func (p *Presenter) Present(src Source, writer Writer) error {
 	stride, direct := 0, false
 	if d, ok := src.(DirectSource); ok {
 		pixels, stride, direct = d.RGB565Rows()
+	}
+	if p.num > 0 {
+		return p.presentFraction(src, pixels, stride, direct, writer)
 	}
 	if direct && p.scale == 1 && stride == p.logicalWidth {
 		return p.presentBands(pixels, writer)
@@ -167,4 +198,50 @@ func (p *Presenter) presentRows(src Source, pixels []uint16, stride int, direct 
 	}
 	return nil
 }
+
+// presentFraction is presentRows for a fractional scale: each logical pixel
+// covers one or more output pixels, as cols and the row mapping say.
+func (p *Presenter) presentFraction(src Source, pixels []uint16, stride int, direct bool, writer Writer) error {
+	b := src.Bounds()
+	w := p.logicalWidth
+	rowWords := int(p.cols[w])
+	for y := 0; y < p.logicalHeight; y++ {
+		var row []uint16
+		if direct {
+			row = pixels[y*stride : y*stride+w]
+		} else {
+			src.ReadRGB565Row(p.row[:w*2], b.Min.Y+y)
+			row = p.words[:w]
+		}
+		hash := hashRow(row)
+		if p.valid[y] && p.hashes[y] == hash {
+			continue
+		}
+		out := p.words[:rowWords]
+		// Expanding backwards also works when row is the start of out: no
+		// column moves left.
+		for x := w - 1; x >= 0; x-- {
+			v := row[x]
+			for j := int(p.cols[x+1]) - 1; j >= int(p.cols[x]); j-- {
+				out[j] = v
+			}
+		}
+		top, bottom := y*p.num/p.den, (y+1)*p.num/p.den
+		if bottom-top > 1 {
+			copy(p.words[rowWords:2*rowWords], out)
+		}
+		for oy := top; oy < bottom; oy += 2 {
+			h := min(2, bottom-oy)
+			if err := writer.WriteRect(p.ox, p.oy+oy, rowWords, h, p.row[:rowWords*2*h]); err != nil {
+				return err
+			}
+		}
+		p.hashes[y] = hash
+		p.valid[y] = true
+		p.Stats.ChangedRows++
+		p.Stats.Bytes += rowWords * 2 * (bottom - top)
+	}
+	return nil
+}
+
 func (p *Presenter) Invalidate() { clear(p.valid); p.cleared = false }

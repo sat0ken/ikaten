@@ -6,9 +6,9 @@ mkdir -p build/smoke
 # These are drawn for 240 by 240 only. ESP32 (without S3) has too little
 # memory for them, so they are not built for it.
 only240="dungeon shooter kart uboat tank train air fish bomb jump all"
-for target in badge esp32s3 esp32 pico gopher-badge gopher-board; do
+for target in badge esp32s3 esp32 esp32-3248s035c-s3 esp32-3248s035c pico gopher-badge gopher-board; do
  for example in bounce assets snake flappy blocks dungeon shooter kart uboat tank train air fish bomb jump all probe drawprobe benchmark; do
-  if [ "$target" = esp32 ]; then
+  if [ "$target" = esp32 ] || [ "$target" = esp32-3248s035c ]; then
    case " $only240 " in *" $example "*) echo "Skipping $example for $target (240x240 only)"; continue;; esac
   fi
   # The launcher holds every game's images, about 2.7 MB, more than these
