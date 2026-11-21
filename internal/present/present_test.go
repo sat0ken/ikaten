@@ -207,3 +207,63 @@ func TestDirectRowsWithStrideAndScale(t *testing.T) {
 		}
 	}
 }
+
+// A fractional scale fills more of a display that is not a whole multiple of
+// the image: 3x3 grows to 4x4 in the middle of 8x4, by nearest neighbour.
+func TestFractionalScale(t *testing.T) {
+	// from returns the logical pixel of output pixel j: the one whose span
+	// [x*4/3, (x+1)*4/3) holds j.
+	from := func(j int) int {
+		for x := 0; ; x++ {
+			if j < (x+1)*4/3 {
+				return x
+			}
+		}
+	}
+	for _, copied := range []bool{false, true} {
+		s := newDirect(3, 3, 3)
+		var src Source = s
+		if copied {
+			src = &source{s.bounds, make([]byte, 18)}
+			for n, v := range s.pixels {
+				src.(*source).pixels[2*n], src.(*source).pixels[2*n+1] = wire(v)
+			}
+		}
+		dst := &writer{width: 8, height: 4, pixels: make([]byte, 64)}
+		p := Presenter{Width: 8, Height: 4, Fractional: true}
+		if err := p.Present(src, dst); err != nil {
+			t.Fatal(err)
+		}
+		for y := range 4 {
+			for x := range 4 {
+				hi, lo := wire(s.pixels[from(y)*3+from(x)])
+				at := (y*8 + x + 2) * 2
+				if dst.pixels[at] != hi || dst.pixels[at+1] != lo {
+					t.Fatalf("copied=%v pixel %d,%d: %02x%02x, want %02x%02x", copied, x, y, dst.pixels[at], dst.pixels[at+1], hi, lo)
+				}
+			}
+		}
+		if dst.pixels[2] != 0 || dst.pixels[13] != 0 {
+			t.Fatal("letterbox not black")
+		}
+		dst.calls = 0
+		if err := p.Present(src, dst); err != nil || dst.calls != 0 {
+			t.Fatal("unchanged frame transferred", err, dst.calls)
+		}
+		if allocs := testing.AllocsPerRun(100, func() {
+			if err := p.Present(src, dst); err != nil {
+				panic(err)
+			}
+		}); allocs != 0 {
+			t.Fatal("present allocates", allocs)
+		}
+	}
+	// A whole multiple keeps the integer path.
+	p := Presenter{Width: 6, Height: 6, Fractional: true}
+	s := newDirect(3, 3, 3)
+	dst := &writer{width: 6, height: 6, pixels: make([]byte, 72)}
+	if err := p.Present(s, dst); err != nil {
+		t.Fatal(err)
+	}
+	checkFrame(t, dst, s, 2, 0, 0)
+}

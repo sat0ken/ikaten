@@ -1,4 +1,4 @@
-//go:build tinygo && esp32
+//go:build tinygo && esp32 && !ikaten_esp32_3248s035c
 
 package hardware
 
