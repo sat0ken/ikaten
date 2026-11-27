@@ -12,15 +12,19 @@ import (
 	"github.com/sat0ken/ikaten/internal/present"
 )
 
-// ST7796Config can be adjusted before SetHardware/RunGame. Width and Height
+// SPILCDConfig can be adjusted before SetHardware/RunGame. Width and Height
 // are the panel's size after MADCTL.
-type ST7796Config struct {
+type SPILCDConfig struct {
 	SPI                                *machine.SPI
 	Frequency                          uint32 // for drawing; the panel is set up at 10MHz
 	SCK, MOSI, MISO, CS, DC, Backlight machine.Pin
 	Width, Height                      int
-	MADCTL                             byte
-	Invert                             bool
+	// Init is the controller's sequence after the software reset
+	// (InitST7796 or InitILI9341). It must leave sleep mode and set 16-bit
+	// colour; MADCTL, the inversion and display on follow.
+	Init   []LCDCommand
+	MADCTL byte
+	Invert bool
 	// Fractional scales the logical image by a fraction to fill the panel's
 	// height: 240x240 becomes 320x320 on a 480x320 panel.
 	Fractional bool
@@ -32,23 +36,28 @@ type ST7796Config struct {
 	PrepareSPI      func() // runs before the SPI bus is configured
 }
 
-// ST7796 is a 4-wire SPI panel with the ST7796S controller. Pixels go
-// straight to the panel; the engine's screen image is the only frame buffer.
-type ST7796 struct {
-	Config    ST7796Config
+// SPILCD is a 4-wire SPI panel with an ST7796S or ILI9341 controller
+// (MIPI DCS commands). Pixels go straight to the panel; the engine's screen
+// image is the only frame buffer.
+type SPILCD struct {
+	Config    SPILCDConfig
 	presenter present.Presenter
 	joystick  *minijoy.Device
 	cmd       [1]byte
 	window    [4]byte
 }
 
-// st7796Init is the ST7796S init sequence of TFT_eSPI (ST7796_Init.h), as the
+// LCDCommand is one step of an init sequence. Data is a string so that the
+// sequences stay in flash.
+type LCDCommand struct {
+	Cmd  byte
+	Data string
+	Wait time.Duration // after the command
+}
+
+// InitST7796 is the ST7796S init sequence of TFT_eSPI (ST7796_Init.h), as
 // github.com/sat0ken/tinygo-cyd sends it on the ESP32-3248S035C.
-var st7796Init = []struct {
-	cmd  byte
-	data string
-	wait time.Duration
-}{
+var InitST7796 = []LCDCommand{
 	{0x11, "", 120 * time.Millisecond}, // sleep out
 	{0xF0, "\xC3", 0},                  // enable extension command 2 part I
 	{0xF0, "\x96", 0},                  // part II
@@ -65,10 +74,35 @@ var st7796Init = []struct {
 	{0xF0, "\x69", 120 * time.Millisecond},
 }
 
-func (d *ST7796) Init() error {
+// InitILI9341 is the ILI9341 init sequence of Adafruit_ILI9341 (initcmd), as
+// github.com/sat0ken/tinygo-cyd sends it on the ESP32-2432S028R.
+var InitILI9341 = []LCDCommand{
+	{0xEF, "\x03\x80\x02", 0},
+	{0xCF, "\x00\xC1\x30", 0},     // power control B
+	{0xED, "\x64\x03\x12\x81", 0}, // power on sequence control
+	{0xE8, "\x85\x00\x78", 0},     // driver timing control A
+	{0xCB, "\x39\x2C\x00\x34\x02", 0},
+	{0xF7, "\x20", 0},         // pump ratio control
+	{0xEA, "\x00\x00", 0},     // driver timing control B
+	{0xC0, "\x23", 0},         // power control 1
+	{0xC1, "\x10", 0},         // power control 2
+	{0xC5, "\x3E\x28", 0},     // VCOM control 1
+	{0xC7, "\x86", 0},         // VCOM control 2
+	{0x37, "\x00", 0},         // vertical scroll start
+	{0x3A, "\x55", 0},         // 16-bit colour
+	{0xB1, "\x00\x18", 0},     // frame rate 79Hz
+	{0xB6, "\x08\x82\x27", 0}, // display function control
+	{0xF2, "\x00", 0},         // 3-gamma off
+	{0x26, "\x01", 0},         // gamma curve 1
+	{0xE0, "\x0F\x31\x2B\x0C\x0E\x08\x4E\xF1\x37\x07\x10\x03\x0E\x09\x00", 0},
+	{0xE1, "\x00\x0E\x14\x03\x11\x07\x31\xC1\x48\x08\x0F\x0C\x31\x36\x0F", 0},
+	{0x11, "", 150 * time.Millisecond}, // sleep out
+}
+
+func (d *SPILCD) Init() error {
 	c := &d.Config
-	if c.SPI == nil || c.Frequency == 0 || c.Width <= 0 || c.Height <= 0 {
-		return errors.New("ikaten: SPI, frequency and size are required")
+	if c.SPI == nil || c.Frequency == 0 || c.Width <= 0 || c.Height <= 0 || len(c.Init) == 0 {
+		return errors.New("ikaten: SPI, frequency, size and init sequence are required")
 	}
 	if c.PrepareSPI != nil {
 		c.PrepareSPI()
@@ -83,9 +117,9 @@ func (d *ST7796) Init() error {
 	// The board has no reset line: reset with the command.
 	d.command(0x01, "")
 	time.Sleep(120 * time.Millisecond)
-	for _, s := range st7796Init {
-		d.command(s.cmd, s.data)
-		time.Sleep(s.wait)
+	for _, s := range c.Init {
+		d.command(s.Cmd, s.Data)
+		time.Sleep(s.Wait)
 	}
 	d.command(0x36, string([]byte{c.MADCTL}))
 	if c.Invert {
@@ -125,7 +159,7 @@ func (d *ST7796) Init() error {
 }
 
 // command sends a command and its parameters with CS low.
-func (d *ST7796) command(cmd byte, data string) {
+func (d *SPILCD) command(cmd byte, data string) {
 	c := &d.Config
 	c.CS.Low()
 	d.send(cmd, nil)
@@ -136,7 +170,7 @@ func (d *ST7796) command(cmd byte, data string) {
 }
 
 // send sends a command byte and then data, with CS already low.
-func (d *ST7796) send(cmd byte, data []byte) {
+func (d *SPILCD) send(cmd byte, data []byte) {
 	c := &d.Config
 	c.DC.Low()
 	d.cmd[0] = cmd
@@ -147,9 +181,9 @@ func (d *ST7796) send(cmd byte, data []byte) {
 	}
 }
 
-func (d *ST7796) Size() (int, int)                   { return d.Config.Width, d.Config.Height }
-func (d *ST7796) Present(screen *ikaten.Image) error { return d.presenter.Present(screen, d) }
-func (d *ST7796) KeyUpdate() error {
+func (d *SPILCD) Size() (int, int)                   { return d.Config.Width, d.Config.Height }
+func (d *SPILCD) Present(screen *ikaten.Image) error { return d.presenter.Present(screen, d) }
+func (d *SPILCD) KeyUpdate() error {
 	if d.joystick != nil {
 		d.joystick.Update()
 	}
@@ -157,7 +191,7 @@ func (d *ST7796) KeyUpdate() error {
 }
 
 // WriteRect sends big-endian RGB565 pixels to a rectangle of the panel.
-func (d *ST7796) WriteRect(x, y, w, h int, data []byte) error {
+func (d *SPILCD) WriteRect(x, y, w, h int, data []byte) error {
 	if w <= 0 || h <= 0 || len(data) < w*h*2 {
 		return errors.New("ikaten: bad rectangle")
 	}
@@ -173,4 +207,4 @@ func (d *ST7796) WriteRect(x, y, w, h int, data []byte) error {
 	c.CS.High()
 	return err
 }
-func (d *ST7796) PresentStats() present.Stats { return d.presenter.Stats }
+func (d *SPILCD) PresentStats() present.Stats { return d.presenter.Stats }
